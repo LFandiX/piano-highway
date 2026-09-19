@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Piano Highway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<!-- LOBBY:START -->
+<link rel="stylesheet" href="css/lobby.css">
+<!-- LOBBY:END -->
+</head>
+<body>
+
+<!-- LOBBY:START -->
+<!-- ============================================================================
+     LOBBY — composer/song selection, the front door for this page.
+     See LOBBY.md. js/integration.js is what wires its Play button to the
+     gameplay engine below, and hides this whole block once a song starts.
+     ========================================================================== -->
+
+<div id="lobby-root">
+
+  <!-- ---------- loading state ---------- -->
+  <div class="lobby-loading" id="lobbyLoading">
+    <div class="note-spinner" aria-hidden="true"></div>
+    <p>Tuning the instruments…</p>
+  </div>
+
+  <!-- ---------- error state (fetch of game_data.json failed) ---------- -->
+  <div class="lobby-error" id="lobbyError" hidden>
+    <h2>The programme didn't load</h2>
+    <p id="lobbyErrorMessage">Something kept game_data.json from loading.</p>
+    <button class="icon-btn" id="retryBtn">Try again</button>
+  </div>
+
+  <!-- ==========================================================================
+       SCREEN 1 — Main Menu (composer selection)
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen1" aria-label="Choose a composer">
+    <header class="menu-header">
+      <p class="kicker">A programme of five masters</p>
+      <h1>Piano Classics</h1>
+    </header>
+
+    <div class="composer-shelf-wrap">
+      <button class="icon-btn round shelf-nav prev" id="shelfPrev" aria-label="Scroll composers left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+
+      <ul class="composer-shelf" id="composerShelf" role="list">
+        <!-- composer-card <li> elements are injected by js/lobby/screens.js -->
+      </ul>
+
+      <button class="icon-btn round shelf-nav next" id="shelfNext" aria-label="Scroll composers right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <div class="shelf-ledge" aria-hidden="true"></div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 2 — Song Selection
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen2" aria-label="Choose a piece">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo1" aria-label="Back to composers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="composer-panel">
+        <img class="panel-portrait" id="s2Portrait" src="" alt="">
+        <h2 class="panel-name" id="s2Name">&nbsp;</h2>
+        <p class="panel-lifespan" id="s2Lifespan">&nbsp;</p>
+        <span class="era-pill" id="s2Era">&nbsp;</span>
+
+        <div class="info-row">
+          <button class="icon-btn small" id="infoBtn" aria-label="About this composer">i</button>
+          <span>About the composer</span>
+        </div>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="song-panel">
+        <h2>Choose a piece</h2>
+        <ul class="song-list" id="songList" role="list">
+          <!-- song-row <li> elements are injected by js/lobby/screens.js -->
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 3 — Composer Biography
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen3" aria-label="Composer biography">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo2FromBio" aria-label="Back to pieces">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="portrait-feature">
+        <div class="frame-inner">
+          <img id="s3Portrait" src="" alt="">
+        </div>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="bio-panel">
+        <h2 id="s3Name">&nbsp;</h2>
+        <div class="bio-vitals">
+          <div class="vital"><span class="label">Lifespan</span><span class="value" id="s3Lifespan">&nbsp;</span></div>
+          <div class="vital"><span class="label">Era</span><span class="value" id="s3Era">&nbsp;</span></div>
+          <div class="vital"><span class="label">From</span><span class="value" id="s3Origin">&nbsp;</span></div>
+        </div>
+        <div class="bio-text" id="s3Bio"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 4 — Pre-Play (song details)
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen4" aria-label="Song details">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo2FromPreplay" aria-label="Back to pieces">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="composer-panel">
+        <img class="panel-portrait" id="s4Portrait" src="" alt="">
+        <h2 class="panel-name" id="s4ComposerName">&nbsp;</h2>
+        <p class="panel-lifespan" id="s4Lifespan">&nbsp;</p>
+        <span class="era-pill" id="s4Era">&nbsp;</span>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="preplay-panel">
+        <p class="eyebrow" id="s4DifficultyLabel">&nbsp;</p>
+        <h2 id="s4SongTitle">&nbsp;</h2>
+
+        <div class="preplay-meta">
+          <div class="score-card">
+            <span class="label">My score</span>
+            <span class="value" id="s4Score">&nbsp;</span>
+          </div>
+        </div>
+
+        <button class="play-btn" id="playBtn">
+          Play
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Always-present escape hatch to the gameplay engine's own setup screen
+       (custom audio/chart upload, the by-ear recorder, the piano-roll
+       editor). Inert here in the standalone demo — js/integration.js is
+       what gives it a click handler, and it only loads alongside the real
+       gameplay module in index.html. -->
+  <a href="#" class="lobby-footer-link" id="customChartLink">Load your own song</a>
+
+</div><!-- /#lobby-root -->
+<!-- LOBBY:END -->
+
+<div id="stage">
+  <canvas id="game" aria-label="Rhythm game highway"></canvas>
+
+  <!-- ==================== HUD ==================== -->
+  <div id="hud">
+    <div class="medals">
+      <div class="medal spent" id="medal1">&#9834;</div>
+      <div class="medal spent" id="medal2">&#9835;</div>
+    </div>
+
+    <div class="plate goals">
+      <dl>
+        <div><dt>Target</dt><dd id="targetScore">950,000</dd></div>
+        <div><dt>Mine</dt><dd class="mine" id="myScore">0</dd></div>
+      </dl>
+      <div class="bar"><i id="goalBar"></i></div>
+    </div>
+
+    <div class="right">
+      <button id="pauseBtn" aria-label="Pause"><span></span></button>
+      <div class="plate readout" style="padding:9px 13px">
+        <small>Score</small><b id="scoreBig">0</b>
+      </div>
+      <div class="plate readout combo" style="padding:9px 13px">
+        <small>Max combo</small><b id="maxCombo">0</b>
+      </div>
+    </div>
+
+    <div class="centre">
+      <div id="judgment"></div>
+      <div id="comboWrap"><div id="comboNum">0</div><em>combo</em></div>
+    </div>
+
+    <div class="bottom">
+      <div class="song">
+        <div class="composer" id="songArtist">No chart loaded</div>
+        <div class="work" id="songTitle">&mdash;</div>
+      </div>
+      <div class="meta">
+        <button id="speedBtn" aria-label="Change scroll speed">1X</button>
+        <div class="difficulty" id="difficulty">MASTER</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RECORDING HUD ==================== -->
+  <div id="recHud" hidden>
+    <div class="rec-bar">
+      <span class="rec-dot"></span>
+      <b id="recClock">0:00</b>
+      <span class="rec-stat"><i id="recCount">0</i> notes</span>
+      <span class="rec-stat"><i id="recHolds">0</i> holds</span>
+      <button class="btn tiny quiet" id="recUndoBtn">Undo last</button>
+      <button class="btn tiny" id="recStopBtn">Stop and save</button>
+    </div>
+    <p class="rec-help">Tap a lane to mark a note. Hold it down to mark a hold of that length. Backspace undoes.</p>
+  </div>
+
+  <!-- ==================== START / SETUP ==================== -->
+  <section class="screen" id="startScreen">
+    <!-- LOBBY:START -->
+    <a href="#" class="back-to-lobby-link" id="backToLobbyBtn">&larr; Back to composers</a>
+    <!-- LOBBY:END -->
+    <div class="card wide">
+      <h1><i>Rhythm game</i>Piano Highway</h1>
+
+      <div class="slots">
+        <div class="slot">
+          <div class="slot-head">
+            <span class="slot-label">Music</span>
+            <label class="btn tiny quiet" for="audioFile">Choose audio</label>
+            <input type="file" id="audioFile" class="hidden-input" accept="audio/*,.mp3,.ogg,.wav,.m4a">
+          </div>
+          <div class="slot-value" id="audioName">optional &mdash; without it, hits play a harpsichord instead</div>
+        </div>
+
+        <div class="slot">
+          <div class="slot-head">
+            <span class="slot-label">Chart</span>
+            <label class="btn tiny quiet" for="chartFile">Choose .json</label>
+            <input type="file" id="chartFile" class="hidden-input" accept="application/json,.json">
+            <button class="btn tiny quiet" id="demoBtn">Use the demo</button>
+          </div>
+          <div class="slot-value" id="chartName">none loaded</div>
+        </div>
+      </div>
+
+      <ul class="report" id="chartReport"></ul>
+
+      <div class="actions row">
+        <button class="btn" id="setupPlayBtn" disabled>Play</button>
+        <button class="btn quiet" id="recordBtn">Record a chart by ear</button>
+        <button class="btn quiet" id="editBtn">Open piano roll editor</button>
+      </div>
+
+      <p class="hint">
+        Keys <kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd>,
+        or press the lower half of a lane on a touchscreen. Chords need two fingers.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================== RECORDER SETUP ==================== -->
+  <section class="screen" id="recordSetup" hidden>
+    <div class="card wide">
+      <h1><i>Chart recorder</i>Mark it by ear</h1>
+      <p>Your song plays while you tap along. Every press becomes a note at the exact
+         second you pressed it, and every hold becomes a hold of that length.</p>
+
+      <div class="fields">
+        <label><span>Title</span><input type="text" id="recTitle" placeholder="My song"></label>
+        <label><span>Artist</span><input type="text" id="recArtist" placeholder=""></label>
+        <label><span>Difficulty</span>
+          <select id="recDiff">
+            <option>EASY</option><option>NORMAL</option><option>HARD</option>
+            <option selected>MASTER</option>
+          </select>
+        </label>
+        <label><span>Lanes</span>
+          <select id="recLanes">
+            <option value="4">4</option><option value="5">5</option>
+            <option value="6" selected>6</option><option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </label>
+        <label><span>BPM</span><input type="number" id="recBpm" placeholder="0 = don't snap" min="0" step="0.1"></label>
+        <label><span>Snap to</span>
+          <select id="recDiv">
+            <option value="1">whole beat</option>
+            <option value="2">1/2 beat</option>
+            <option value="4" selected>1/4 beat</option>
+            <option value="8">1/8 beat</option>
+          </select>
+        </label>
+        <label class="wide-field"><span>Beat 1 lands at (ms)</span><input type="number" id="recGrid" value="0" step="10"></label>
+      </div>
+
+      <p class="hint">Setting a BPM pulls your taps onto the grid, which is the difference
+         between a chart that feels tight and one that feels drunk. Leave it at 0 to keep
+         raw timings.</p>
+
+      <div class="actions row">
+        <button class="btn" id="recStartBtn">Start recording</button>
+        <button class="btn quiet" id="recCancelBtn">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PIANO ROLL EDITOR ==================== -->
+  <section class="screen editor-screen" id="editorScreen" hidden>
+    <div class="editor-panel">
+      <div class="editor-toolbar">
+        <div class="tb-group">
+          <button class="btn tiny" id="edPlayBtn" title="Space">&#9654;</button>
+          <b id="edClock" class="tb-clock">0:00</b>
+        </div>
+        <div class="tb-group">
+          <label class="tb-field"><span>BPM</span><input type="number" id="edBpm" min="0" step="0.1" style="width:66px"></label>
+          <label class="tb-field"><span><input type="checkbox" id="edSnap" checked> Snap</span></label>
+          <label class="tb-field"><span>1/</span>
+            <select id="edDiv" style="width:56px">
+              <option value="1">1</option><option value="2">2</option>
+              <option value="4" selected>4</option><option value="8">8</option>
+            </select>
+          </label>
+          <label class="tb-field"><span>Lanes</span>
+            <select id="edLanes" style="width:52px">
+              <option value="4">4</option><option value="5">5</option>
+              <option value="6" selected>6</option><option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <label class="tb-field"><span><input type="checkbox" id="edTick" checked> Tick</span></label>
+        </div>
+        <div class="tb-group">
+          <button class="btn tiny quiet" id="edUndoBtn" title="Ctrl+Z">&#8630; Undo</button>
+          <button class="btn tiny quiet" id="edRedoBtn" title="Ctrl+Shift+Z">&#8631; Redo</button>
+          <button class="btn tiny quiet" id="edDeleteBtn" title="Delete">Delete</button>
+          <button class="btn tiny quiet" id="edFitBtn" title="End">Fit</button>
+        </div>
+      </div>
+
+      <canvas id="editorCanvas" class="editor-canvas"></canvas>
+
+      <div class="editor-status">
+        <span><i id="edCount">0</i> notes</span>
+        <span><i id="edHolds">0</i> holds</span>
+        <span id="edOverlapWarn" class="warn-text" hidden>&#9888; <i id="edOverlaps">0</i> overlapping</span>
+        <span class="rec-help" style="margin-left:auto">
+          Click empty = add note &middot; drag = hold &middot; drag edge = resize &middot;
+          right-click = delete &middot; Shift-drag = select many
+        </span>
+      </div>
+
+      <div class="editor-footer">
+        <label class="tb-field"><span>Title</span><input type="text" id="edTitle" placeholder="My song"></label>
+        <label class="tb-field"><span>Artist</span><input type="text" id="edArtist" placeholder=""></label>
+        <label class="tb-field"><span>Difficulty</span>
+          <select id="edDiff">
+            <option>EASY</option><option>NORMAL</option><option>HARD</option>
+            <option selected>MASTER</option>
+          </select>
+        </label>
+        <label class="tb-field"><span>Offset (s)</span><input type="number" id="edOffset" value="0" step="0.005" style="width:74px"></label>
+        <div class="editor-footer-actions">
+          <button class="btn tiny quiet" id="edBackBtn">Back to setup</button>
+          <button class="btn tiny quiet" id="edDownloadBtn">Download .json</button>
+          <button class="btn tiny" id="edUseBtn">Use this chart</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PAUSE ==================== -->
+  <section class="screen" id="pauseScreen" hidden>
+    <div class="card">
+      <h1>Paused</h1>
+      <div class="offset-row">
+        <span>Chart offset</span>
+        <button class="btn tiny quiet" id="offsetMinus">&minus;5 ms</button>
+        <b id="offsetValue">+0 ms</b>
+        <button class="btn tiny quiet" id="offsetPlus">+5 ms</button>
+      </div>
+      <p class="hint">Notes landing before the beat? Go up. After it? Go down.
+         Once it feels right, copy the number into <code>song.offset</code> (in seconds).</p>
+      <div class="actions">
+        <button class="btn" id="resumeBtn">Resume</button>
+        <button class="btn quiet" id="restartBtn">Start over</button>
+        <button class="btn quiet" id="quitBtn">Back to setup</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== RESULTS ==================== -->
+  <section class="screen" id="resultScreen" hidden>
+    <div class="card">
+      <h1><i>Finished</i>Your run</h1>
+      <div class="final" id="finalScore">0</div>
+      <div class="tally">
+        <div><span style="color:var(--j-marvelous)">Marvelous</span><b id="tMarv">0</b></div>
+        <div><span style="color:var(--j-great)">Great</span><b id="tGreat">0</b></div>
+        <div><span style="color:var(--j-good)">Good</span><b id="tGood">0</b></div>
+        <div><span style="color:var(--j-miss)">Miss</span><b id="tMiss">0</b></div>
+        <div><span>Max combo</span><b id="tCombo">0</b></div>
+        <div><span>Accuracy</span><b id="tAcc">0%</b></div>
+      </div>
+      <div class="actions row">
+        <button class="btn" id="againBtn">Play again</button>
+        <button class="btn quiet" id="menuBtn">Back to setup</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="js/main.js"></script>
+<!-- LOBBY:START -->
+<script type="module" src="js/lobby/app.js"></script>
+<script type="module" src="js/integration.js"></script>
+<!-- LOBBY:END -->
+</body>
+</html>

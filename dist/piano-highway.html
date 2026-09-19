@@ -1,0 +1,3775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Piano Highway — standalone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   1. TOKENS
+   Palette is drawn from the instrument itself: walnut case, ivory naturals,
+   brass pedal lyre, and the crimson felt under the fallboard.
+   ========================================================================== */
+:root{
+  --stage:        #0a0705;
+  --walnut-deep:  #1b100a;
+  --walnut-lit:   #6b4526;
+  --ivory:        #f6f1e3;
+  --ivory-dim:    #cfc6b0;
+  --brass:        #c9a227;
+  --brass-lit:    #f0dc9a;
+  --felt:         #7d1f2b;
+  --ink:          rgba(10,7,5,.72);
+
+  --j-marvelous:  #f7e7a8;
+  --j-great:      #7fe3c4;
+  --j-good:       #9db4e8;
+  --j-miss:       #d1616e;
+
+  --font-display: "Cinzel", "Times New Roman", serif;
+  --font-body:    "Cormorant Garamond", Georgia, serif;
+}
+/* The stage is intentionally dark in both schemes — it is a darkened recital
+   hall. Only the chrome panels lift slightly in a light environment. */
+:root:not([data-theme="light"]){ color-scheme: dark; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --ink: rgba(10,7,5,.78); }
+}
+:root[data-theme="dark"]{ --ink: rgba(10,7,5,.78); }
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+html,body{
+  height:100%;
+  background:var(--stage);
+  color:var(--ivory);
+  font-family:var(--font-body);
+  overflow:hidden;
+  /* Kill every browser gesture that would fight the game. */
+  touch-action:none;
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior:none;
+}
+
+/* ============================================================================
+   2. STAGE + CANVAS
+   ========================================================================== */
+#stage{
+  position:fixed; inset:0;
+  display:grid; place-items:center;
+  background:
+    radial-gradient(120% 80% at 50% 8%, #2a1c14 0%, #130c08 45%, var(--stage) 100%);
+}
+#game{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ============================================================================
+   3. HUD OVERLAY
+   ========================================================================== */
+#hud{ position:absolute; inset:0; pointer-events:none; }
+#hud > *{ position:absolute; }
+
+/* -- brass frame shared by the side plates -- */
+.plate{
+  background:var(--ink);
+  border:1px solid rgba(201,162,39,.38);
+  border-radius:3px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.5), inset 0 1px 0 rgba(240,220,154,.12);
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+}
+
+/* -- top centre: two medallions -- */
+.medals{
+  top:calc(env(safe-area-inset-top,0px) + 10px); left:50%;
+  transform:translateX(-50%);
+  display:flex; gap:10px;
+}
+.medal{
+  width:34px; height:34px; border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 28%, #fdf3c4 0%, var(--brass-lit) 26%, var(--brass) 58%, #8a6b12 100%);
+  box-shadow:0 2px 7px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.22);
+  display:grid; place-items:center;
+  font-family:var(--font-display); font-size:15px; color:#5c4409;
+  text-shadow:0 1px 0 rgba(255,255,255,.4);
+}
+.medal.spent{ filter:grayscale(.85) brightness(.5); }
+
+/* -- left plate: goal vs current -- */
+.goals{
+  left:calc(env(safe-area-inset-left,0px) + 12px); top:50%;
+  transform:translateY(-50%);
+  padding:12px 16px; min-width:132px;
+}
+.goals dl{ display:grid; gap:11px; }
+.goals dt{
+  font-family:var(--font-display); font-size:10.5px; letter-spacing:.14em;
+  color:var(--brass); opacity:.85;
+}
+.goals dd{ font-size:23px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+.goals .mine{ color:var(--brass-lit); }
+.goals .bar{
+  margin-top:9px; height:3px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden;
+}
+.goals .bar i{
+  display:block; height:100%; width:0%;
+  background:linear-gradient(90deg,var(--brass),var(--brass-lit));
+  transition:width .18s linear;
+}
+
+/* -- right stack: pause, score, max combo -- */
+.right{
+  right:calc(env(safe-area-inset-right,0px) + 12px); top:calc(env(safe-area-inset-top,0px) + 12px);
+  display:flex; flex-direction:column; align-items:flex-end; gap:12px;
+}
+#pauseBtn{
+  pointer-events:auto; cursor:pointer;
+  width:42px; height:42px; display:grid; place-items:center;
+  background:var(--ink); border:1px solid rgba(201,162,39,.45); border-radius:3px;
+  color:var(--brass-lit);
+}
+#pauseBtn:focus-visible{ outline:2px solid var(--brass-lit); outline-offset:2px; }
+#pauseBtn span{ display:block; width:4px; height:15px; background:currentColor; box-shadow:9px 0 0 currentColor; margin-right:9px; }
+.readout{ text-align:right; }
+.readout b{
+  display:block; font-size:34px; font-weight:700; line-height:.95;
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+  text-shadow:0 2px 12px rgba(0,0,0,.8);
+}
+.readout small{
+  font-family:var(--font-display); font-size:9.5px; letter-spacing:.16em;
+  color:var(--brass); opacity:.8;
+}
+.readout.combo b{ font-size:22px; color:var(--ivory-dim); }
+
+/* -- centre: judgment + combo -- */
+.centre{
+  left:50%; top:34%; transform:translate(-50%,-50%);
+  text-align:center; width:min(90vw,520px);
+  padding:18px 0 22px;
+  background:radial-gradient(60% 72% at 50% 52%, rgba(8,5,3,.62), rgba(8,5,3,0) 72%);
+}
+#judgment{
+  font-family:var(--font-display); font-weight:700;
+  font-size:clamp(20px,4.4vw,34px); letter-spacing:.22em;
+  opacity:0; line-height:1;
+}
+#judgment.pop{ animation:judgePop .42s cubic-bezier(.16,1,.3,1); }
+@keyframes judgePop{
+  0%{ opacity:0; transform:scale(.82) translateY(6px); }
+  22%{ opacity:1; transform:scale(1.04) translateY(0); }
+  70%{ opacity:1; transform:scale(1); }
+  100%{ opacity:0; transform:scale(1); }
+}
+#comboWrap{ margin-top:10px; opacity:0; transition:opacity .16s; }
+#comboWrap.on{ opacity:1; }
+#comboNum{
+  font-size:clamp(46px,10vw,78px); font-weight:700; line-height:.9;
+  color:var(--ivory); font-variant-numeric:tabular-nums;
+  text-shadow:0 0 26px rgba(247,231,168,.34), 0 3px 14px rgba(0,0,0,.85);
+}
+#comboNum.beat{ animation:comboBeat .13s ease-out; }
+@keyframes comboBeat{ from{ transform:scale(1.13); } to{ transform:scale(1); } }
+#comboWrap em{
+  display:block; font-family:var(--font-display); font-style:normal;
+  font-size:10px; letter-spacing:.34em; color:var(--brass-lit); margin-top:2px;
+  text-shadow:0 1px 6px rgba(0,0,0,.95);
+}
+
+/* -- bottom bar -- */
+.bottom{
+  left:0; right:0; bottom:calc(env(safe-area-inset-bottom,0px) + 10px);
+  display:flex; justify-content:space-between; align-items:flex-end;
+  padding:0 16px; gap:14px;
+}
+.song{ max-width:58%; }
+.song .composer{
+  font-family:var(--font-display); font-size:10px; letter-spacing:.2em; color:var(--brass);
+}
+.song .work{
+  font-size:clamp(14px,2.6vw,19px); font-style:italic; color:var(--ivory-dim); line-height:1.25;
+}
+.meta{ display:flex; align-items:center; gap:12px; }
+#speedBtn{
+  pointer-events:auto; cursor:pointer;
+  font-family:var(--font-display); font-size:17px; font-weight:600;
+  color:var(--ivory); background:none; border:1px solid rgba(201,162,39,.4);
+  border-radius:3px; padding:5px 11px;
+}
+#speedBtn:focus-visible{ outline:2px solid var(--brass-lit); outline-offset:2px; }
+.difficulty{
+  font-family:var(--font-display); font-weight:700; font-size:15px; letter-spacing:.2em;
+  color:#e0b7ef; text-shadow:0 0 16px rgba(190,110,230,.55);
+}
+
+/* ============================================================================
+   4. SCREENS (start / pause / results)
+   ========================================================================== */
+.screen{
+  position:absolute; inset:0; z-index:5;
+  display:grid; place-items:center; padding:24px;
+  background:radial-gradient(90% 70% at 50% 45%, rgba(26,15,8,.86), rgba(6,4,3,.96));
+  backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+}
+.screen[hidden]{ display:none; }
+.card{ width:min(480px,100%); text-align:center; }
+.card h1{
+  font-family:var(--font-display); font-weight:400;
+  font-size:clamp(28px,6.5vw,46px); line-height:1.08; letter-spacing:.02em;
+}
+.card h1 i{ display:block; font-style:italic; font-family:var(--font-body); font-size:.52em; color:var(--brass); letter-spacing:.14em; margin-bottom:.5em; }
+.card p{ margin-top:14px; font-size:16px; line-height:1.6; color:var(--ivory-dim); }
+.keyrow{ display:flex; justify-content:center; gap:7px; margin:22px 0 4px; flex-wrap:wrap; }
+.keyrow kbd{
+  font-family:var(--font-display); font-size:14px; font-weight:600;
+  width:38px; height:44px; display:grid; place-items:center;
+  background:linear-gradient(#fbf7ec,#ddd4bf); color:#2b1b10;
+  border-radius:2px 2px 5px 5px; box-shadow:0 3px 0 #8a7c62, 0 6px 12px rgba(0,0,0,.5);
+}
+.hint{ font-size:14px; color:rgba(207,198,176,.62); font-style:italic; }
+.actions{ margin-top:26px; display:flex; flex-direction:column; gap:11px; align-items:center; }
+.btn{
+  cursor:pointer; font-family:var(--font-display); font-size:14px; letter-spacing:.14em;
+  padding:13px 34px; border-radius:3px; border:1px solid var(--brass);
+  background:linear-gradient(180deg,rgba(201,162,39,.24),rgba(201,162,39,.05));
+  color:var(--brass-lit); min-width:220px;
+}
+.btn:hover{ background:linear-gradient(180deg,rgba(201,162,39,.38),rgba(201,162,39,.12)); }
+.btn:focus-visible{ outline:2px solid var(--brass-lit); outline-offset:3px; }
+.btn.quiet{ border-color:rgba(255,255,255,.2); color:var(--ivory-dim); background:none; }
+#fileLabel{ display:inline-block; }
+#audioFile{ position:absolute; width:1px; height:1px; opacity:0; }
+#loadState{ margin-top:10px; font-size:13px; color:var(--brass); min-height:1.2em; }
+
+.tally{ margin:22px auto 0; width:min(320px,100%); display:grid; gap:7px; }
+.tally div{ display:flex; justify-content:space-between; font-size:17px; }
+.tally span:first-child{ font-family:var(--font-display); font-size:11px; letter-spacing:.14em; align-self:center; }
+.final{ font-size:clamp(40px,10vw,64px); font-weight:700; font-variant-numeric:tabular-nums; color:var(--brass-lit); line-height:1; }
+
+@media (prefers-reduced-motion:reduce){
+  *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+@media (max-width:520px){
+  .goals{ padding:9px 12px; min-width:104px; }
+  .goals dd{ font-size:18px; }
+  .goals dl{ gap:8px; }
+  .readout b{ font-size:24px; }
+  .readout.combo b{ font-size:17px; }
+  .right{ gap:8px; }
+  #pauseBtn{ width:36px; height:36px; }
+  #pauseBtn span{ height:13px; width:3.5px; box-shadow:7px 0 0 currentColor; margin-right:7px; }
+  .medal{ width:27px; height:27px; font-size:12px; }
+  .song{ max-width:54%; }
+  .song .work{ font-size:13px; }
+  .centre{ top:30%; }
+}
+@media (max-height:440px){
+  .centre{ top:31%; }
+  .goals{ padding:8px 11px; min-width:104px; }
+  .goals dd{ font-size:18px; }
+  .readout b{ font-size:24px; }
+}
+
+/* ============================================================================
+   5. SETUP, RECORDER AND CALIBRATION CHROME
+   ========================================================================== */
+.card.wide{ width:min(600px,100%); }
+.hidden-input{ position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+
+/* -- file slots on the setup screen -- */
+.slots{ margin-top:24px; display:grid; gap:12px; text-align:left; }
+.slot{
+  border:1px solid rgba(201,162,39,.26); border-radius:3px;
+  background:rgba(10,7,5,.45); padding:12px 14px;
+}
+.slot-head{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.slot-label{
+  font-family:var(--font-display); font-size:11px; letter-spacing:.16em;
+  color:var(--brass); flex:1 1 auto;
+}
+.slot-value{ margin-top:8px; font-size:14px; color:rgba(207,198,176,.6); font-style:italic; }
+.slot-value.ok{ color:var(--brass-lit); font-style:normal; }
+.slot-value.bad{ color:var(--j-miss); font-style:normal; }
+
+/* -- chart validation report -- */
+.report{ list-style:none; margin:14px 0 0; text-align:left; display:grid; gap:5px; }
+.report li{
+  font-size:13.5px; line-height:1.45; padding:7px 10px; border-radius:3px;
+  border-left:2px solid currentColor;
+}
+.report li.ok{ color:var(--brass-lit); background:rgba(201,162,39,.09); }
+.report li.warn{ color:#e6c98a; background:rgba(230,201,138,.08); }
+.report li.bad{ color:var(--j-miss); background:rgba(209,97,110,.1); }
+
+/* -- recorder setup form -- */
+.fields{
+  margin-top:22px; display:grid; grid-template-columns:repeat(2,1fr);
+  gap:11px 14px; text-align:left;
+}
+.fields label{ display:grid; gap:5px; }
+.fields .wide-field{ grid-column:1 / -1; }
+.fields span{
+  font-family:var(--font-display); font-size:10px; letter-spacing:.14em; color:var(--brass);
+}
+.fields input, .fields select{
+  font-family:var(--font-body); font-size:16px; color:var(--ivory);
+  background:rgba(10,7,5,.6); border:1px solid rgba(201,162,39,.3);
+  border-radius:3px; padding:9px 10px; width:100%;
+}
+.fields input:focus-visible, .fields select:focus-visible{
+  outline:2px solid var(--brass-lit); outline-offset:1px;
+}
+.fields option{ background:#1b100a; }
+
+/* -- buttons -- */
+.btn.tiny{ min-width:0; padding:7px 13px; font-size:11.5px; letter-spacing:.1em; }
+.btn:disabled{ opacity:.35; cursor:not-allowed; }
+.actions.row{ flex-direction:row; flex-wrap:wrap; justify-content:center; }
+.actions.row .btn{ min-width:0; flex:0 1 auto; }
+
+/* -- offset calibration -- */
+.offset-row{
+  margin-top:20px; display:flex; align-items:center; justify-content:center; gap:11px;
+}
+.offset-row > span{
+  font-family:var(--font-display); font-size:10.5px; letter-spacing:.14em; color:var(--brass);
+}
+.offset-row b{ font-size:20px; min-width:82px; font-variant-numeric:tabular-nums; }
+
+.hint kbd{
+  display:inline-block; margin:0 2px; padding:2px 7px;
+  font-family:var(--font-display); font-size:12px;
+  background:linear-gradient(#fbf7ec,#ddd4bf); color:#2b1b10;
+  border-radius:2px 2px 4px 4px; box-shadow:0 2px 0 #8a7c62;
+}
+code{
+  font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:.88em;
+  background:rgba(201,162,39,.13); padding:1px 5px; border-radius:2px; color:var(--brass-lit);
+}
+
+/* -- recording overlay -- */
+#recHud{
+  position:absolute; left:0; right:0; top:calc(env(safe-area-inset-top,0px) + 54px);
+  z-index:4; display:grid; justify-items:center; gap:8px; pointer-events:none; padding:0 14px;
+}
+#recHud[hidden]{ display:none; }
+.rec-bar{
+  pointer-events:auto;
+  display:flex; align-items:center; gap:13px; flex-wrap:wrap; justify-content:center;
+  background:var(--ink); border:1px solid rgba(209,97,110,.5); border-radius:3px;
+  padding:9px 15px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+}
+.rec-bar b{ font-size:21px; font-variant-numeric:tabular-nums; min-width:52px; }
+.rec-stat{ font-size:13px; color:var(--ivory-dim); }
+.rec-stat i{ font-style:normal; font-weight:700; color:var(--brass-lit); }
+.rec-dot{
+  width:10px; height:10px; border-radius:50%; background:var(--j-miss);
+  box-shadow:0 0 12px var(--j-miss); animation:recPulse 1.4s ease-in-out infinite;
+}
+@keyframes recPulse{ 50%{ opacity:.25; } }
+.rec-help{
+  font-size:13px; font-style:italic; color:rgba(207,198,176,.55);
+  text-align:center; text-shadow:0 1px 6px rgba(0,0,0,.9);
+}
+
+@media (max-width:520px){
+  .fields{ grid-template-columns:1fr; }
+  .rec-bar{ gap:9px; padding:8px 11px; }
+  .rec-bar b{ font-size:17px; min-width:42px; }
+}
+
+/* ============================================================================
+   6. PIANO ROLL EDITOR
+   ========================================================================== */
+.screen.editor-screen{
+  display:flex; flex-direction:column; align-items:stretch; justify-content:stretch;
+  padding:0; background:#0c0805; backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.screen.editor-screen[hidden]{ display:none; }
+.editor-panel{
+  display:flex; flex-direction:column; width:100%; height:100%; min-height:0;
+}
+
+.editor-toolbar, .editor-footer{
+  display:flex; flex-wrap:wrap; align-items:center; gap:14px;
+  padding:9px 16px; background:#160e08; border-bottom:1px solid rgba(201,162,39,.22);
+  flex:0 0 auto;
+}
+.editor-footer{ border-bottom:none; border-top:1px solid rgba(201,162,39,.22); gap:10px 16px; }
+.tb-group{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tb-field{ display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--ivory-dim); white-space:nowrap; }
+.tb-field span{ display:flex; align-items:center; gap:4px; font-family:var(--font-display); font-size:10px; letter-spacing:.08em; color:var(--brass); }
+.tb-field input[type="text"], .tb-field input[type="number"], .tb-field select{
+  font-family:var(--font-body); font-size:13.5px; color:var(--ivory);
+  background:rgba(0,0,0,.4); border:1px solid rgba(201,162,39,.35);
+  border-radius:3px; padding:5px 7px; width:88px;
+}
+.tb-field input[type="checkbox"]{ accent-color:var(--brass-lit); width:14px; height:14px; }
+.tb-clock{ font-size:16px; font-variant-numeric:tabular-nums; min-width:44px; color:var(--brass-lit); }
+.editor-footer-actions{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+
+.editor-canvas{
+  flex:1 1 auto; width:100%; min-height:0; display:block;
+  background:#100a06; cursor:crosshair; touch-action:none;
+}
+
+.editor-status{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:6px 16px; background:#140d08; border-top:1px solid rgba(201,162,39,.14);
+  font-size:12.5px; color:var(--ivory-dim); flex:0 0 auto;
+}
+.editor-status i{ font-style:normal; font-weight:700; color:var(--brass-lit); }
+.editor-status .warn-text{ color:var(--j-miss); font-weight:600; }
+.editor-status .rec-help{ font-size:12px; }
+
+@media (max-width:780px){
+  .editor-toolbar, .editor-footer{ gap:8px 12px; padding:8px 10px; }
+  .tb-field input, .tb-field select{ width:64px; }
+  .editor-status .rec-help{ display:none; }
+  .editor-footer-actions{ margin-left:0; width:100%; justify-content:flex-end; }
+}
+
+/* ============================================================================
+   7. LOBBY ↔ GAMEPLAY INTEGRATION CHROME
+   Only active once js/integration.js gives it a click handler (see index.html).
+   ========================================================================== */
+.back-to-lobby-link{
+  position: absolute;
+  top: clamp(16px, 3vh, 28px);
+  left: clamp(16px, 4vw, 40px);
+  z-index: 2;
+  font-size: 13px;
+  color: var(--ivory-dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color .16s ease, border-color .16s ease;
+}
+.back-to-lobby-link:hover, .back-to-lobby-link:focus-visible{
+  color: var(--brass-lit);
+  border-color: rgba(240,220,154,.4);
+}
+.back-to-lobby-link:focus-visible{ outline: 2px solid var(--brass-lit); outline-offset: 3px; }
+
+</style></head>
+<body>
+<div id="stage">
+  <canvas id="game" aria-label="Rhythm game highway"></canvas>
+
+  <!-- ==================== HUD ==================== -->
+  <div id="hud">
+    <div class="medals">
+      <div class="medal spent" id="medal1">&#9834;</div>
+      <div class="medal spent" id="medal2">&#9835;</div>
+    </div>
+
+    <div class="plate goals">
+      <dl>
+        <div><dt>Target</dt><dd id="targetScore">950,000</dd></div>
+        <div><dt>Mine</dt><dd class="mine" id="myScore">0</dd></div>
+      </dl>
+      <div class="bar"><i id="goalBar"></i></div>
+    </div>
+
+    <div class="right">
+      <button id="pauseBtn" aria-label="Pause"><span></span></button>
+      <div class="plate readout" style="padding:9px 13px">
+        <small>Score</small><b id="scoreBig">0</b>
+      </div>
+      <div class="plate readout combo" style="padding:9px 13px">
+        <small>Max combo</small><b id="maxCombo">0</b>
+      </div>
+    </div>
+
+    <div class="centre">
+      <div id="judgment"></div>
+      <div id="comboWrap"><div id="comboNum">0</div><em>combo</em></div>
+    </div>
+
+    <div class="bottom">
+      <div class="song">
+        <div class="composer" id="songArtist">No chart loaded</div>
+        <div class="work" id="songTitle">&mdash;</div>
+      </div>
+      <div class="meta">
+        <button id="speedBtn" aria-label="Change scroll speed">1X</button>
+        <div class="difficulty" id="difficulty">MASTER</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RECORDING HUD ==================== -->
+  <div id="recHud" hidden>
+    <div class="rec-bar">
+      <span class="rec-dot"></span>
+      <b id="recClock">0:00</b>
+      <span class="rec-stat"><i id="recCount">0</i> notes</span>
+      <span class="rec-stat"><i id="recHolds">0</i> holds</span>
+      <button class="btn tiny quiet" id="recUndoBtn">Undo last</button>
+      <button class="btn tiny" id="recStopBtn">Stop and save</button>
+    </div>
+    <p class="rec-help">Tap a lane to mark a note. Hold it down to mark a hold of that length. Backspace undoes.</p>
+  </div>
+
+  <!-- ==================== START / SETUP ==================== -->
+  <section class="screen" id="startScreen">    <div class="card wide">
+      <h1><i>Rhythm game</i>Piano Highway</h1>
+
+      <div class="slots">
+        <div class="slot">
+          <div class="slot-head">
+            <span class="slot-label">Music</span>
+            <label class="btn tiny quiet" for="audioFile">Choose audio</label>
+            <input type="file" id="audioFile" class="hidden-input" accept="audio/*,.mp3,.ogg,.wav,.m4a">
+          </div>
+          <div class="slot-value" id="audioName">optional &mdash; without it, hits play a harpsichord instead</div>
+        </div>
+
+        <div class="slot">
+          <div class="slot-head">
+            <span class="slot-label">Chart</span>
+            <label class="btn tiny quiet" for="chartFile">Choose .json</label>
+            <input type="file" id="chartFile" class="hidden-input" accept="application/json,.json">
+            <button class="btn tiny quiet" id="demoBtn">Use the demo</button>
+          </div>
+          <div class="slot-value" id="chartName">none loaded</div>
+        </div>
+      </div>
+
+      <ul class="report" id="chartReport"></ul>
+
+      <div class="actions row">
+        <button class="btn" id="setupPlayBtn" disabled>Play</button>
+        <button class="btn quiet" id="recordBtn">Record a chart by ear</button>
+        <button class="btn quiet" id="editBtn">Open piano roll editor</button>
+      </div>
+
+      <p class="hint">
+        Keys <kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd>,
+        or press the lower half of a lane on a touchscreen. Chords need two fingers.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================== RECORDER SETUP ==================== -->
+  <section class="screen" id="recordSetup" hidden>
+    <div class="card wide">
+      <h1><i>Chart recorder</i>Mark it by ear</h1>
+      <p>Your song plays while you tap along. Every press becomes a note at the exact
+         second you pressed it, and every hold becomes a hold of that length.</p>
+
+      <div class="fields">
+        <label><span>Title</span><input type="text" id="recTitle" placeholder="My song"></label>
+        <label><span>Artist</span><input type="text" id="recArtist" placeholder=""></label>
+        <label><span>Difficulty</span>
+          <select id="recDiff">
+            <option>EASY</option><option>NORMAL</option><option>HARD</option>
+            <option selected>MASTER</option>
+          </select>
+        </label>
+        <label><span>Lanes</span>
+          <select id="recLanes">
+            <option value="4">4</option><option value="5">5</option>
+            <option value="6" selected>6</option><option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </label>
+        <label><span>BPM</span><input type="number" id="recBpm" placeholder="0 = don't snap" min="0" step="0.1"></label>
+        <label><span>Snap to</span>
+          <select id="recDiv">
+            <option value="1">whole beat</option>
+            <option value="2">1/2 beat</option>
+            <option value="4" selected>1/4 beat</option>
+            <option value="8">1/8 beat</option>
+          </select>
+        </label>
+        <label class="wide-field"><span>Beat 1 lands at (ms)</span><input type="number" id="recGrid" value="0" step="10"></label>
+      </div>
+
+      <p class="hint">Setting a BPM pulls your taps onto the grid, which is the difference
+         between a chart that feels tight and one that feels drunk. Leave it at 0 to keep
+         raw timings.</p>
+
+      <div class="actions row">
+        <button class="btn" id="recStartBtn">Start recording</button>
+        <button class="btn quiet" id="recCancelBtn">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PIANO ROLL EDITOR ==================== -->
+  <section class="screen editor-screen" id="editorScreen" hidden>
+    <div class="editor-panel">
+      <div class="editor-toolbar">
+        <div class="tb-group">
+          <button class="btn tiny" id="edPlayBtn" title="Space">&#9654;</button>
+          <b id="edClock" class="tb-clock">0:00</b>
+        </div>
+        <div class="tb-group">
+          <label class="tb-field"><span>BPM</span><input type="number" id="edBpm" min="0" step="0.1" style="width:66px"></label>
+          <label class="tb-field"><span><input type="checkbox" id="edSnap" checked> Snap</span></label>
+          <label class="tb-field"><span>1/</span>
+            <select id="edDiv" style="width:56px">
+              <option value="1">1</option><option value="2">2</option>
+              <option value="4" selected>4</option><option value="8">8</option>
+            </select>
+          </label>
+          <label class="tb-field"><span>Lanes</span>
+            <select id="edLanes" style="width:52px">
+              <option value="4">4</option><option value="5">5</option>
+              <option value="6" selected>6</option><option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <label class="tb-field"><span><input type="checkbox" id="edTick" checked> Tick</span></label>
+        </div>
+        <div class="tb-group">
+          <button class="btn tiny quiet" id="edUndoBtn" title="Ctrl+Z">&#8630; Undo</button>
+          <button class="btn tiny quiet" id="edRedoBtn" title="Ctrl+Shift+Z">&#8631; Redo</button>
+          <button class="btn tiny quiet" id="edDeleteBtn" title="Delete">Delete</button>
+          <button class="btn tiny quiet" id="edFitBtn" title="End">Fit</button>
+        </div>
+      </div>
+
+      <canvas id="editorCanvas" class="editor-canvas"></canvas>
+
+      <div class="editor-status">
+        <span><i id="edCount">0</i> notes</span>
+        <span><i id="edHolds">0</i> holds</span>
+        <span id="edOverlapWarn" class="warn-text" hidden>&#9888; <i id="edOverlaps">0</i> overlapping</span>
+        <span class="rec-help" style="margin-left:auto">
+          Click empty = add note &middot; drag = hold &middot; drag edge = resize &middot;
+          right-click = delete &middot; Shift-drag = select many
+        </span>
+      </div>
+
+      <div class="editor-footer">
+        <label class="tb-field"><span>Title</span><input type="text" id="edTitle" placeholder="My song"></label>
+        <label class="tb-field"><span>Artist</span><input type="text" id="edArtist" placeholder=""></label>
+        <label class="tb-field"><span>Difficulty</span>
+          <select id="edDiff">
+            <option>EASY</option><option>NORMAL</option><option>HARD</option>
+            <option selected>MASTER</option>
+          </select>
+        </label>
+        <label class="tb-field"><span>Offset (s)</span><input type="number" id="edOffset" value="0" step="0.005" style="width:74px"></label>
+        <div class="editor-footer-actions">
+          <button class="btn tiny quiet" id="edBackBtn">Back to setup</button>
+          <button class="btn tiny quiet" id="edDownloadBtn">Download .json</button>
+          <button class="btn tiny" id="edUseBtn">Use this chart</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PAUSE ==================== -->
+  <section class="screen" id="pauseScreen" hidden>
+    <div class="card">
+      <h1>Paused</h1>
+      <div class="offset-row">
+        <span>Chart offset</span>
+        <button class="btn tiny quiet" id="offsetMinus">&minus;5 ms</button>
+        <b id="offsetValue">+0 ms</b>
+        <button class="btn tiny quiet" id="offsetPlus">+5 ms</button>
+      </div>
+      <p class="hint">Notes landing before the beat? Go up. After it? Go down.
+         Once it feels right, copy the number into <code>song.offset</code> (in seconds).</p>
+      <div class="actions">
+        <button class="btn" id="resumeBtn">Resume</button>
+        <button class="btn quiet" id="restartBtn">Start over</button>
+        <button class="btn quiet" id="quitBtn">Back to setup</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== RESULTS ==================== -->
+  <section class="screen" id="resultScreen" hidden>
+    <div class="card">
+      <h1><i>Finished</i>Your run</h1>
+      <div class="final" id="finalScore">0</div>
+      <div class="tally">
+        <div><span style="color:var(--j-marvelous)">Marvelous</span><b id="tMarv">0</b></div>
+        <div><span style="color:var(--j-great)">Great</span><b id="tGreat">0</b></div>
+        <div><span style="color:var(--j-good)">Good</span><b id="tGood">0</b></div>
+        <div><span style="color:var(--j-miss)">Miss</span><b id="tMiss">0</b></div>
+        <div><span>Max combo</span><b id="tCombo">0</b></div>
+        <div><span>Accuracy</span><b id="tAcc">0%</b></div>
+      </div>
+      <div class="actions row">
+        <button class="btn" id="againBtn">Play again</button>
+        <button class="btn quiet" id="menuBtn">Back to setup</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ===== js/config.js ================================================== */
+/* =========================================================================
+ *  CONFIG  (js/config.js)
+ *  -------------------------------------------------------------------------
+ *  Engine constants. Anything that belongs to a *song* lives in the chart
+ *  JSON instead — see js/chart.js.
+ * ======================================================================= */
+const CONFIG = {
+  laneCount: 6,
+  keys: ["s", "d", "f", "j", "k", "l"],
+
+  /* ---- 3D camera ------------------------------------------------------
+   * The highway is a flat plane. A point at track-depth z projects with
+   * scale = FOCAL / (FOCAL + z).  scale === 1 at the hit line, → 0 at the
+   * vanishing point. Screen Y and lane X are both just that scale applied
+   * to their hit-line values, which is exactly correct one-point
+   * perspective for a ground plane. */
+  FOCAL: 3.4,
+  Z_PER_SEC: 7.0,      // track units travelled per second at 1X
+  Z_FADE: 8.5,         // notes start fading in here
+  Z_CULL: 14.0,        // nothing is drawn beyond here (scale ≈ 0.19)
+  Z_BEHIND: -0.75,     // notes are dropped once this far past the camera
+  NOTE_DEPTH: 0.32,    // physical thickness of a tap note, in z units
+
+  /* ---- screen layout (fractions of canvas height/width) ---- */
+  horizonRatio: 0.15,
+  hitLineRatio: 0.80,
+  trackHalfRatio: 0.44,
+
+  /* ---- judgment windows, in seconds ---- */
+  W_MARVELOUS: 0.045,
+  W_GREAT: 0.090,
+  W_GOOD: 0.140,
+  W_MISS: 0.185,
+  W_RELEASE: 0.160,    // how early a hold may be released and still count
+  MIN_HOLD: 0.18,      // shortest press that authoring tools treat as a hold, not a tap
+
+  /* ---- set from the loaded chart ---- */
+  TARGET_SCORE: 950000,
+  MAX_SCORE: 1000000,
+};
+
+/* Which physical keys map to which lane, per lane count. Lane 0 is always
+   leftmost. " " is the spacebar, used as the centre lane in odd layouts. */
+const KEY_LAYOUTS = {
+  4: ["d", "f", "j", "k"],
+  5: ["d", "f", " ", "j", "k"],
+  6: ["s", "d", "f", "j", "k", "l"],
+  7: ["s", "d", "f", " ", "j", "k", "l"],
+  8: ["a", "s", "d", "f", "j", "k", "l", ";"],
+};
+
+/** Switch layouts. Callers must then re-run renderer.resize() and
+ *  input.rebuild(), because both cache per-lane arrays. */
+function setLaneCount(n) {
+  CONFIG.laneCount = n;
+  CONFIG.keys = KEY_LAYOUTS[n] || KEY_LAYOUTS[6];
+}
+
+/** What to print on a key cap. */
+const keyLabel = (k) => (k === " " ? "\u2423" : k.toUpperCase());
+
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+const JUDGMENTS = {
+  MARVELOUS: { label: "MARVELOUS", weight: 1.00, color: "#f7e7a8" },
+  GREAT:     { label: "GREAT",     weight: 0.72, color: "#7fe3c4" },
+  GOOD:      { label: "GOOD",      weight: 0.38, color: "#9db4e8" },
+  MISS:      { label: "MISS",      weight: 0.00, color: "#d1616e" },
+};
+
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/** True while the person is typing somewhere — title fields, BPM boxes, the
+ *  chart-recorder metadata, etc. Every global keyboard shortcut in the app
+ *  (lane keys, Escape, Delete, undo) checks this first, or a "d" typed into
+ *  a song-title field would be swallowed as a lane press. */
+function isTypingInField() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
+
+/* ===== js/chart.js =================================================== */
+
+
+/* =========================================================================
+ *  CHART  (js/chart.js)
+ *  -------------------------------------------------------------------------
+ *  Reads a .json chart file, checks it, and turns it into the runtime note
+ *  objects the game plays. Nothing else in the codebase knows what a chart
+ *  file looks like — if you want to change the format, change it here.
+ *
+ *  ── THE FORMAT ──────────────────────────────────────────────────────────
+ *  {
+ *    "format": "piano-highway-chart",
+ *    "version": 1,
+ *
+ *    "song": {
+ *      "title":  "Alla Hornpipe",
+ *      "artist": "G. F. Handel",
+ *      "audio":  "assets/audio/my-song.mp3",   // path, relative to index.html
+ *      "offset": 0                             // see below
+ *    },
+ *
+ *    "chart": {
+ *      "difficulty":  "MASTER",
+ *      "level":       14,
+ *      "charter":     "your name",
+ *      "lanes":       6,        // 4–8; 6 is the S D F J K L layout
+ *      "scrollSpeed": 1,        // starting speed multiplier
+ *      "targetScore": 950000,
+ *      "bpm":         116       // only needed if you write notes in beats
+ *    },
+ *
+ *    "notes": [
+ *      { "t": 4.138, "lane": 2 },              // a tap at 4.138 s in lane 2
+ *      { "t": 4.138, "lane": 3 },              // same t = a CHORD with the above
+ *      { "t": 8.793, "lane": 2, "d": 0.776 }   // a HOLD: press at t, let go at t+d
+ *    ]
+ *  }
+ *
+ *  ── THE THREE FIELDS THAT MATTER ────────────────────────────────────────
+ *    t     the second in the song when the note must be struck (a decimal).
+ *    lane  0 = leftmost … lanes-1 = rightmost. With 6 lanes: S D F J K L.
+ *    d     how long the note is held, in seconds. Leave it out for a tap.
+ *
+ *  A CHORD is just two or more notes sharing the same t on different lanes.
+ *  There is no separate "chord" type — you never need one.
+ *
+ *  ── SHORTHAND ───────────────────────────────────────────────────────────
+ *  Typing hundreds of objects gets old, so an array works too:
+ *      [4.138, 2]            same as { "t": 4.138, "lane": 2 }
+ *      [8.793, 2, 0.776]     same as { "t": 8.793, "lane": 2, "d": 0.776 }
+ *  You can mix both styles in the same file.
+ *
+ *  ── BEATS INSTEAD OF SECONDS ────────────────────────────────────────────
+ *  If you'd rather count beats, set chart.bpm and use "b" / "db":
+ *      { "b": 16,   "lane": 2 }             // beat 16
+ *      { "b": 19.5, "lane": 4, "db": 3 }    // beat 19.5, held for 3 beats
+ *  Seconds and beats can coexist in one file. beat 0 = second 0.
+ *
+ *  ── OFFSET ──────────────────────────────────────────────────────────────
+ *  song.offset shifts every note in the chart, in seconds. If your notes
+ *  consistently land early, raise it; if late, go negative. Start at 0 and
+ *  adjust in ±0.02 steps. Headphones and Bluetooth need different values,
+ *  so the game also lets you nudge it live from the pause screen.
+ * ======================================================================= */
+
+const CHART_FORMAT = "piano-highway-chart";
+const CHART_VERSION = 1;
+
+/** A blank chart, ready to be filled in. Also written to charts/template.json */
+const CHART_TEMPLATE = {
+  format: CHART_FORMAT,
+  version: CHART_VERSION,
+  song: { title: "Untitled", artist: "", audio: "assets/audio/my-song.mp3", offset: 0 },
+  chart: { difficulty: "MASTER", level: 1, charter: "", lanes: 6, scrollSpeed: 1, targetScore: 950000, bpm: 0 },
+  notes: [],
+};
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+
+/**
+ * Validate and normalise a parsed JSON chart.
+ * Never throws on bad note data — it collects problems so you can fix the
+ * file, and returns the notes that were usable.
+ *
+ * @returns {{ song, chart, notes, errors: string[], warnings: string[] }}
+ */
+function parseChart(raw) {
+  const errors = [];
+  const warnings = [];
+
+  if (!raw || typeof raw !== "object") {
+    return { ...CHART_TEMPLATE, notes: [], errors: ["The file isn't a JSON object."], warnings };
+  }
+  if (raw.format && raw.format !== CHART_FORMAT) {
+    warnings.push(`format is "${raw.format}", expected "${CHART_FORMAT}". Reading it anyway.`);
+  }
+  if (isNum(raw.version) && raw.version > CHART_VERSION) {
+    warnings.push(`This chart is version ${raw.version}; this build understands ${CHART_VERSION}.`);
+  }
+
+  /* ---- header ---- */
+  const song = { ...CHART_TEMPLATE.song, ...(raw.song || {}) };
+  const meta = { ...CHART_TEMPLATE.chart, ...(raw.chart || {}) };
+
+  song.offset = isNum(song.offset) ? song.offset : 0;
+  meta.lanes = clamp(Math.round(isNum(meta.lanes) ? meta.lanes : 6), 4, 8);
+  meta.scrollSpeed = isNum(meta.scrollSpeed) ? meta.scrollSpeed : 1;
+  meta.targetScore = isNum(meta.targetScore) && meta.targetScore > 0 ? meta.targetScore : 950000;
+  meta.bpm = isNum(meta.bpm) && meta.bpm > 0 ? meta.bpm : 0;
+
+  if (raw.chart && raw.chart.lanes !== undefined && meta.lanes !== raw.chart.lanes) {
+    warnings.push(`chart.lanes must be 4–8; using ${meta.lanes}.`);
+  }
+
+  /* ---- notes ---- */
+  if (!Array.isArray(raw.notes)) {
+    errors.push("notes must be an array.");
+    return { song, chart: meta, notes: [], errors, warnings };
+  }
+
+  const secPerBeat = meta.bpm ? 60 / meta.bpm : 0;
+  const parsed = [];
+
+  raw.notes.forEach((entry, i) => {
+    const where = `notes[${i}]`;
+    let t, lane, d;
+
+    if (Array.isArray(entry)) {
+      [t, lane, d] = entry;                       // [t, lane] or [t, lane, d]
+    } else if (entry && typeof entry === "object") {
+      lane = entry.lane;
+      if (isNum(entry.t)) t = entry.t;
+      else if (isNum(entry.b)) {
+        if (!secPerBeat) { errors.push(`${where} uses "b" but chart.bpm isn't set.`); return; }
+        t = entry.b * secPerBeat;
+      }
+      if (isNum(entry.d)) d = entry.d;
+      else if (isNum(entry.db)) {
+        if (!secPerBeat) { errors.push(`${where} uses "db" but chart.bpm isn't set.`); return; }
+        d = entry.db * secPerBeat;
+      }
+    } else {
+      errors.push(`${where} must be an object or an array.`);
+      return;
+    }
+
+    if (!isNum(t)) { errors.push(`${where} is missing a numeric "t" (or "b").`); return; }
+    if (t < 0) { errors.push(`${where} has a negative time (${t}).`); return; }
+    if (!Number.isInteger(lane)) { errors.push(`${where} needs an integer "lane".`); return; }
+    if (lane < 0 || lane >= meta.lanes) {
+      errors.push(`${where} is on lane ${lane}; this chart has lanes 0–${meta.lanes - 1}.`);
+      return;
+    }
+    if (d !== undefined && !isNum(d)) { errors.push(`${where} has a non-numeric "d".`); return; }
+    if (isNum(d) && d < 0) { errors.push(`${where} has a negative duration.`); return; }
+
+    /* A hold shorter than one judgment window is impossible to play as a
+       hold, so treat it as the tap the charter almost certainly meant. */
+    if (isNum(d) && d > 0 && d < CONFIG.W_GOOD) {
+      warnings.push(`${where} is only ${d.toFixed(3)}s long — too short to hold, turned into a tap.`);
+      d = 0;
+    }
+
+    parsed.push({
+      lane,
+      time: t + song.offset,
+      dur: isNum(d) ? d : 0,
+    });
+  });
+
+  /* Charters rarely write notes in order; sort so the engine's early-exit
+     scans are valid. Chords keep a stable lane order. */
+  parsed.sort((a, b) => a.time - b.time || a.lane - b.lane);
+
+  /* ---- overlap check: one lane can only hold one note at a time ---- */
+  const lastEnd = new Array(meta.lanes).fill(-Infinity);
+  const lastIdx = new Array(meta.lanes).fill(-1);
+  parsed.forEach((n, i) => {
+    const end = n.time + n.dur;
+    if (n.time < lastEnd[n.lane] - 1e-6) {
+      errors.push(
+        `Lane ${n.lane}: the note at ${n.time.toFixed(3)}s starts before the one at ` +
+        `${parsed[lastIdx[n.lane]].time.toFixed(3)}s has finished.`
+      );
+    } else if (n.time - lastEnd[n.lane] < 0.04 && lastIdx[n.lane] !== -1) {
+      warnings.push(`Lane ${n.lane}: two notes are only ${((n.time - lastEnd[n.lane]) * 1000).toFixed(0)}ms apart at ${n.time.toFixed(3)}s.`);
+    }
+    lastEnd[n.lane] = end;
+    lastIdx[n.lane] = i;
+  });
+
+  if (!parsed.length) errors.push("The chart has no playable notes.");
+
+  return { song, chart: meta, notes: parsed, errors, warnings };
+}
+
+/** Turn parsed notes into fresh runtime objects. Call this on every retry. */
+function instantiate(notes) {
+  return notes.map((n, i) => ({
+    id: i,
+    lane: n.lane,
+    time: n.time,
+    dur: n.dur,
+    end: n.time + n.dur,
+    type: n.dur > 0 ? "hold" : "tap",
+    state: "pending",   // pending → held → done | missed
+    headJudged: false,
+    flash: 0,           // 0..1 head-hit glow
+  }));
+}
+
+/** Total judgment events: a tap scores once, a hold scores head + release. */
+const countJudgments = (notes) =>
+  notes.reduce((s, n) => s + (n.dur > 0 ? 2 : 1), 0);
+
+/** Fetch a chart over http(s). Needs a server — file:// will be blocked. */
+async function loadChartURL(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Chart fetch failed: ${res.status} ${url}`);
+  return parseChart(await res.json());
+}
+
+/** Read a chart from an <input type="file"> selection. */
+async function loadChartFile(file) {
+  return parseChart(JSON.parse(await file.text()));
+}
+
+/**
+ * Serialise notes back out to the file format, using the compact array
+ * shorthand. This is what the recorder's export button writes.
+ */
+function serializeChart({ song, chart, notes }) {
+  const round = (v) => Math.round(v * 1000) / 1000;
+  return {
+    format: CHART_FORMAT,
+    version: CHART_VERSION,
+    song: { ...song, offset: round(song.offset || 0) },
+    chart: { ...chart },
+    notes: notes
+      .slice()
+      .sort((a, b) => a.time - b.time || a.lane - b.lane)
+      .map((n) => {
+        /* undo the offset so the file stays independent of it */
+        const t = round(n.time - (song.offset || 0));
+        return n.dur > 0 ? [t, n.lane, round(n.dur)] : [t, n.lane];
+      }),
+  };
+}
+
+/** Pretty-print with one note per line — diffable and hand-editable. */
+function stringifyChart(obj) {
+  const notes = obj.notes.map((n) => "    " + JSON.stringify(n)).join(",\n");
+  const head = { ...obj, notes: "__NOTES__" };
+  return JSON.stringify(head, null, 2).replace('"__NOTES__"', `[\n${notes}\n  ]`);
+}
+
+
+/* ===== js/demo-chart.js ============================================== */
+/* =========================================================================
+ *  DEMO CHART  (js/demo-chart.js)
+ *  -------------------------------------------------------------------------
+ *  Identical to charts/demo-alla-hornpipe.json, but as a JS module so the
+ *  built-in demo works when you open index.html straight off the disk —
+ *  fetch() cannot read local files, import() can.
+ *
+ *  Your own charts do NOT need this. Load them with the chart picker, or
+ *  with game.loadChartFromURL("charts/my-song.json") when served.
+ * ======================================================================= */
+const DEMO_CHART = {
+  "format": "piano-highway-chart",
+  "version": 1,
+  "song": {
+    "title": "Water Music Suite No. 2 — Alla Hornpipe",
+    "artist": "G. F. Handel",
+    "audio": "assets/audio/alla-hornpipe.mp3",
+    "offset": 0
+  },
+  "chart": {
+    "difficulty": "MASTER",
+    "level": 14,
+    "charter": "built-in demo",
+    "lanes": 6,
+    "scrollSpeed": 1,
+    "targetScore": 950000,
+    "bpm": 116
+  },
+  "notes": [
+    [4.138,2],
+    [4.138,3],
+    [4.914,4],
+    [5.172,5],
+    [5.69,1],
+    [5.69,4],
+    [6.466,0],
+    [6.724,1],
+    [7.241,0],
+    [7.241,3],
+    [7.759,4],
+    [8.017,5],
+    [8.276,4],
+    [8.793,2,0.776],
+    [8.793,5],
+    [9.569,1],
+    [9.828,0],
+    [10.086,1],
+    [10.345,0],
+    [10.345,3],
+    [10.862,4],
+    [11.121,5],
+    [11.379,4],
+    [11.897,2,0.776],
+    [11.897,5],
+    [12.672,1],
+    [12.931,0],
+    [13.19,1],
+    [13.448,1,1.552],
+    [13.448,4],
+    [13.966,5],
+    [14.224,4],
+    [14.483,5],
+    [15,0],
+    [15,4,1.552],
+    [15.517,2],
+    [15.776,0],
+    [16.034,2],
+    [16.552,0],
+    [16.552,3],
+    [17.069,4],
+    [17.328,5],
+    [17.586,4],
+    [18.103,2,0.776],
+    [18.103,5],
+    [18.879,1],
+    [19.138,0],
+    [19.397,1],
+    [19.655,5],
+    [19.914,4],
+    [20.172,3],
+    [20.431,2],
+    [20.69,1],
+    [20.948,0],
+    [21.207,0],
+    [21.466,1],
+    [21.724,2],
+    [21.983,3],
+    [22.241,4],
+    [22.5,5],
+    [22.759,0],
+    [22.759,5],
+    [23.276,1],
+    [23.276,4],
+    [23.793,2],
+    [23.793,3],
+    [24.31,2,1.293],
+    [24.31,3,1.293],
+    [25.086,0],
+    [25.345,5],
+    [25.862,0],
+    [25.862,2],
+    [25.862,4],
+    [26.638,1],
+    [26.638,3],
+    [26.638,5],
+    [27.414,0,1.034],
+    [27.414,5,1.034],
+    [27.931,2],
+    [28.19,3],
+    [28.448,2],
+    [28.707,3],
+    [28.966,0],
+    [28.966,3],
+    [29.483,4],
+    [29.741,5],
+    [30,4],
+    [30.517,2,0.776],
+    [30.517,5],
+    [31.293,1],
+    [31.552,0],
+    [31.81,1],
+    [32.069,1,1.552],
+    [32.069,4],
+    [32.586,5],
+    [32.845,4],
+    [33.103,5],
+    [33.621,0],
+    [33.621,4,1.552],
+    [34.138,2],
+    [34.397,0],
+    [34.655,2],
+    [35.172,5],
+    [35.431,4],
+    [35.69,3],
+    [35.948,2],
+    [36.207,1],
+    [36.466,0],
+    [36.724,0],
+    [36.983,1],
+    [37.241,2],
+    [37.5,3],
+    [37.759,4],
+    [38.017,5],
+    [38.276,0],
+    [38.276,5],
+    [38.793,1],
+    [38.793,4],
+    [39.31,2],
+    [39.31,3],
+    [39.828,2,1.293],
+    [39.828,3,1.293],
+    [40.603,0],
+    [40.862,5],
+    [41.379,0],
+    [41.379,2],
+    [41.379,4],
+    [42.155,1],
+    [42.155,3],
+    [42.155,5],
+    [42.931,0,1.034],
+    [42.931,5,1.034],
+    [43.448,2],
+    [43.707,3],
+    [43.966,2],
+    [44.224,3],
+    [44.483,1,1.552],
+    [44.483,4],
+    [45,5],
+    [45.259,4],
+    [45.517,5],
+    [46.034,0],
+    [46.034,4,1.552],
+    [46.552,2],
+    [46.81,0],
+    [47.069,2],
+    [47.586,5],
+    [47.845,4],
+    [48.103,3],
+    [48.362,2],
+    [48.621,1],
+    [48.879,0],
+    [49.138,0],
+    [49.397,1],
+    [49.655,2],
+    [49.914,3],
+    [50.172,4],
+    [50.431,5],
+    [50.69,0],
+    [50.69,5],
+    [51.207,1],
+    [51.207,4],
+    [51.724,2],
+    [51.724,3],
+    [52.241,2,1.293],
+    [52.241,3,1.293],
+    [53.017,0],
+    [53.276,5]
+  ]
+};
+
+
+/* ===== js/audio.js =================================================== */
+/* =========================================================================
+ *  AUDIO  (js/audio.js)
+ *  -------------------------------------------------------------------------
+ *  The AudioContext clock is the single source of truth for song time — it
+ *  is sample-accurate and immune to rAF jitter. It runs whether or not an
+ *  actual buffer is playing, so the "no file loaded" demo uses the same
+ *  timing path as a real track.
+ * ======================================================================= */
+class Conductor {
+  constructor() {
+    this.ctx = null;
+    this.buffer = null;
+    this.source = null;
+    this.startedAt = 0;      // ctx.currentTime when the song began
+    this.pausedAt = 0;       // song time captured on pause
+    this.running = false;
+    this.duration = 0;
+    this.master = null;
+  }
+
+  ensureContext() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.9;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
+  }
+
+  /* ---- HOW TO LOAD AN EXTERNAL .mp3 / .ogg --------------------------
+   * Served over http(s) (a local dev server is enough — file:// will be
+   * blocked by CORS):
+   *
+   *     await conductor.loadURL("assets/audio/alla-hornpipe.ogg");
+   *
+   * Pick .ogg first and fall back to .mp3 for maximum browser coverage:
+   *
+   *     const canOgg = new Audio().canPlayType('audio/ogg; codecs="vorbis"');
+   *     await conductor.loadURL(canOgg ? "song.ogg" : "song.mp3");
+   * ------------------------------------------------------------------ */
+  async loadURL(url) {
+    this.ensureContext();
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Audio fetch failed: ${res.status} ${url}`);
+    return this._decode(await res.arrayBuffer());
+  }
+
+  /** Same decode path, for a File chosen through <input type="file">. */
+  async loadFile(file) {
+    this.ensureContext();
+    return this._decode(await file.arrayBuffer());
+  }
+
+  async _decode(arrayBuffer) {
+    this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
+    this.duration = this.buffer.duration;
+    return this.buffer;
+  }
+
+  start(fromSeconds = 0) {
+    this.ensureContext();
+    this.stopSource();
+    if (this.buffer) {
+      this.source = this.ctx.createBufferSource();
+      this.source.buffer = this.buffer;
+      this.source.connect(this.master);
+      this.source.start(0, Math.max(0, fromSeconds));
+    }
+    this.startedAt = this.ctx.currentTime - fromSeconds;
+    this.running = true;
+  }
+
+  stopSource() {
+    if (this.source) { try { this.source.stop(); } catch (e) {} this.source.disconnect(); this.source = null; }
+  }
+
+  pause() {
+    if (!this.running) return;
+    this.pausedAt = this.time;
+    this.stopSource();
+    this.running = false;
+  }
+
+  resume() { if (!this.running) this.start(this.pausedAt); }
+
+  stop() { this.stopSource(); this.running = false; this.pausedAt = 0; }
+
+  /** Current song position in seconds. */
+  get time() {
+    if (!this.ctx) return 0;
+    return this.running ? this.ctx.currentTime - this.startedAt : this.pausedAt;
+  }
+
+  /* ---- fallback instrument -------------------------------------------
+   * With no audio file loaded, each successful hit plays a plucked tone so
+   * the chart is still musical. Lanes are tuned to a D-major spread, the
+   * key of the Hornpipe. */
+  pluck(lane, strong = false) {
+    if (!this.ctx || this.buffer) return;   // real audio wins
+    const freqs = [146.83, 220.0, 293.66, 369.99, 440.0, 587.33]; // D3 A3 D4 F#4 A4 D5
+    const t = this.ctx.currentTime;
+    const g = this.ctx.createGain();
+    g.connect(this.master);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(strong ? 0.26 : 0.19, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (strong ? 1.5 : 0.95));
+
+    [1, 2, 3].forEach((h, i) => {
+      const o = this.ctx.createOscillator();
+      o.type = i === 0 ? "triangle" : "sine";
+      o.frequency.value = freqs[lane] * h;
+      const hg = this.ctx.createGain();
+      hg.gain.value = [1, 0.3, 0.12][i];
+      o.connect(hg); hg.connect(g);
+      o.start(t); o.stop(t + 1.6);
+    });
+  }
+}
+
+
+
+
+/* ===== js/render.js ================================================== */
+
+
+/* =========================================================================
+ *  RENDERER  (js/render.js)
+ * ======================================================================= */
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.wood = makeWoodTexture(256, 768);
+    this.trackLayer = document.createElement("canvas");  // baked once per resize
+    this.dpr = 1;
+    this.resize();
+  }
+
+  /* -------- geometry ------------------------------------------------- */
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = this.canvas.clientWidth || window.innerWidth;
+    const h = this.canvas.clientHeight || window.innerHeight;
+    this.dpr = dpr;
+    this.W = w; this.H = h;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    /* Adaptive camera. A tall portrait phone would otherwise get a narrow
+       spire, so on those the horizon drops and the board widens. k = 0 at
+       a 9:19.5 phone, 1 at 3:2 and wider. */
+    const k = clamp((w / h - 0.46) / (1.5 - 0.46), 0, 1);
+    this.cx = w / 2;
+    this.horizonY = h * lerp(0.30, CONFIG.horizonRatio, k);
+    this.hitY = h * lerp(0.785, CONFIG.hitLineRatio, k);
+    this.trackH = this.hitY - this.horizonY;
+    this.halfW = Math.min(w * lerp(0.475, CONFIG.trackHalfRatio, k), h * 0.62);
+    this.laneW = (this.halfW * 2) / CONFIG.laneCount;
+
+    // lane centre X at scale 1, relative to canvas centre
+    this.laneCx = [];
+    for (let i = 0; i < CONFIG.laneCount; i++) {
+      this.laneCx.push(-this.halfW + this.laneW * (i + 0.5));
+    }
+    this.bakeTrack();
+  }
+
+  /** Perspective scale for a track-depth z. */
+  scaleOf(z) { return CONFIG.FOCAL / (CONFIG.FOCAL + Math.max(z, -CONFIG.FOCAL * 0.85)); }
+  /** Screen Y from a scale. */
+  yOf(s) { return this.horizonY + this.trackH * s; }
+  /** Inverse: the depth that lands on a given scale. */
+  zOf(s) { return CONFIG.FOCAL / s - CONFIG.FOCAL; }
+
+  /* -------- baked wooden highway --------------------------------------
+   * The board never moves, so the whole perspective-warped texture is
+   * rendered once into an offscreen canvas and blitted each frame. This is
+   * a classic scanline (Mode-7 style) texture map: for every screen row we
+   * solve for z, read the matching row of the wood texture, and stretch it
+   * to that row's width. */
+  bakeTrack() {
+    const t = this.trackLayer;
+    t.width = this.canvas.width; t.height = this.canvas.height;
+    const g = t.getContext("2d");
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.clearRect(0, 0, this.W, this.H);
+
+    const V_PER_Z = 78;                       // texture rows per track unit
+    const texH = this.wood.height;
+    const step = 1;
+    g.imageSmoothingEnabled = true;
+
+    for (let y = Math.ceil(this.horizonY) + 1; y <= this.hitY; y += step) {
+      const s = (y - this.horizonY) / this.trackH;      // 0 at horizon, 1 at hit line
+      if (s <= 0.0001) continue;
+      const z = this.zOf(s);
+      let v = (z * V_PER_Z) % texH;
+      if (v < 0) v += texH;
+      const w = this.halfW * 2 * s;
+      const srcH = Math.max(1, Math.min(6, 1 + z * 0.9));  // mip-ish blur far away
+      g.globalAlpha = 1;
+      g.drawImage(this.wood, 0, Math.min(v, texH - srcH), this.wood.width, srcH,
+                  this.cx - w / 2, y, w, step + 0.6);
+    }
+
+    /* haze into the vanishing point so far-field moiré disappears */
+    const haze = g.createLinearGradient(0, this.horizonY, 0, this.horizonY + this.trackH * 0.55);
+    haze.addColorStop(0, "rgba(14,9,6,1)");
+    haze.addColorStop(0.35, "rgba(14,9,6,.72)");
+    haze.addColorStop(1, "rgba(14,9,6,0)");
+    g.save();
+    this.trackPath(g, 0.0, 1.0);
+    g.clip();
+    g.fillStyle = haze;
+    g.fillRect(0, this.horizonY, this.W, this.trackH);
+
+    /* polished sheen down the centre of the board */
+    const sheen = g.createLinearGradient(this.cx - this.halfW, 0, this.cx + this.halfW, 0);
+    sheen.addColorStop(0, "rgba(0,0,0,.45)");
+    sheen.addColorStop(0.42, "rgba(255,226,170,.07)");
+    sheen.addColorStop(0.5, "rgba(255,235,190,.12)");
+    sheen.addColorStop(0.58, "rgba(255,226,170,.07)");
+    sheen.addColorStop(1, "rgba(0,0,0,.45)");
+    g.fillStyle = sheen;
+    g.fillRect(0, this.horizonY, this.W, this.trackH);
+    g.restore();
+
+    /* lane dividers — in one-point perspective these are straight lines */
+    for (let i = 0; i <= CONFIG.laneCount; i++) {
+      const x0 = -this.halfW + this.laneW * i;
+      const edge = (i === 0 || i === CONFIG.laneCount);
+      const grad = g.createLinearGradient(0, this.horizonY, 0, this.hitY);
+      if (edge) {
+        grad.addColorStop(0, "rgba(201,162,39,0)");
+        grad.addColorStop(0.35, "rgba(201,162,39,.30)");
+        grad.addColorStop(1, "rgba(240,220,154,.85)");
+      } else {
+        grad.addColorStop(0, "rgba(255,240,205,0)");
+        grad.addColorStop(0.4, "rgba(255,240,205,.07)");
+        grad.addColorStop(1, "rgba(255,240,205,.26)");
+      }
+      g.strokeStyle = grad;
+      g.lineWidth = edge ? 2.2 : 1;
+      g.beginPath();
+      g.moveTo(this.cx, this.horizonY);
+      g.lineTo(this.cx + x0, this.hitY);
+      g.stroke();
+    }
+  }
+
+  /** Path covering the track between two scale values (1 = hit line). */
+  trackPath(g, sFar, sNear) {
+    const yF = this.yOf(sFar), yN = this.yOf(sNear);
+    g.beginPath();
+    g.moveTo(this.cx - this.halfW * sFar, yF);
+    g.lineTo(this.cx + this.halfW * sFar, yF);
+    g.lineTo(this.cx + this.halfW * sNear, yN);
+    g.lineTo(this.cx - this.halfW * sNear, yN);
+    g.closePath();
+  }
+
+  /* -------- frame ------------------------------------------------------ */
+  drawBackground() {
+    const g = this.ctx;
+    g.clearRect(0, 0, this.W, this.H);
+    const bg = g.createRadialGradient(this.cx, this.horizonY, 10, this.cx, this.horizonY, this.H * 1.15);
+    bg.addColorStop(0, "#402b1d");
+    bg.addColorStop(0.28, "#1d120b");
+    bg.addColorStop(1, "#080605");
+    g.fillStyle = bg;
+    g.fillRect(0, 0, this.W, this.H);
+
+    /* a soft stage glow sitting on the horizon */
+    const glow = g.createRadialGradient(this.cx, this.horizonY, 0, this.cx, this.horizonY, this.W * 0.42);
+    glow.addColorStop(0, "rgba(255,215,150,.20)");
+    glow.addColorStop(1, "rgba(255,215,150,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, this.W, this.horizonY + this.trackH * 0.5);
+  }
+
+  drawTrack() { this.ctx.drawImage(this.trackLayer, 0, 0, this.W, this.H); }
+
+  /** Lit trapezoid up a lane while its key is down. */
+  drawLanePress(lane, strength) {
+    if (strength <= 0.01) return;
+    const g = this.ctx;
+    const sFar = 0.30, sNear = 1.0;
+    const yF = this.yOf(sFar), yN = this.yOf(sNear);
+    const cF = this.cx + this.laneCx[lane] * sFar, cN = this.cx + this.laneCx[lane] * sNear;
+    const hF = this.laneW * 0.5 * sFar, hN = this.laneW * 0.5 * sNear;
+    const grad = g.createLinearGradient(0, yF, 0, yN);
+    grad.addColorStop(0, "rgba(255,226,160,0)");
+    grad.addColorStop(1, `rgba(255,231,176,${0.30 * strength})`);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(cF - hF, yF); g.lineTo(cF + hF, yF);
+    g.lineTo(cN + hN, yN); g.lineTo(cN - hN, yN);
+    g.closePath(); g.fill();
+  }
+
+  /** The brass hit line plus the six key caps beneath it. */
+  drawHitLine(pressed, pulse) {
+    const g = this.ctx;
+    const y = this.hitY;
+
+    g.save();
+    g.shadowColor = "rgba(255,226,150,.9)";
+    g.shadowBlur = 22 + pulse * 16;
+    const lg = g.createLinearGradient(this.cx - this.halfW, 0, this.cx + this.halfW, 0);
+    lg.addColorStop(0, "rgba(201,162,39,.25)");
+    lg.addColorStop(0.5, "rgba(255,244,205,1)");
+    lg.addColorStop(1, "rgba(201,162,39,.25)");
+    g.strokeStyle = lg;
+    g.lineWidth = 3.2;
+    g.beginPath();
+    g.moveTo(this.cx - this.halfW, y);
+    g.lineTo(this.cx + this.halfW, y);
+    g.stroke();
+    g.restore();
+
+    /* key caps — the physical keyboard under the board */
+    const capH = clamp(Math.min(this.H - y - 48, this.laneW * 1.15), 18, 82);
+    for (let i = 0; i < CONFIG.laneCount; i++) {
+      const x = this.cx + this.laneCx[i] - this.laneW / 2 + 2;
+      const w = this.laneW - 4;
+      const down = pressed[i];
+      const gr = g.createLinearGradient(0, y, 0, y + capH);
+      if (down) { gr.addColorStop(0, "#fffdf4"); gr.addColorStop(0.7, "#f3e9cd"); gr.addColorStop(1, "#cdb982"); }
+      else      { gr.addColorStop(0, "#efe7d3"); gr.addColorStop(0.55, "#ddd2ba"); gr.addColorStop(1, "#9d917a"); }
+      g.save();
+      if (down) { g.shadowColor = "rgba(255,230,160,.85)"; g.shadowBlur = 20; }
+      g.fillStyle = gr;
+      roundRect(g, x, y + 3, w, capH, 3);
+      g.fill();
+      g.restore();
+      g.strokeStyle = down ? "rgba(255,244,205,.95)" : "rgba(60,44,30,.75)";
+      g.lineWidth = 1;
+      g.stroke();
+
+      g.fillStyle = down ? "#2b1b10" : "rgba(70,54,38,.72)";
+      g.font = `600 ${Math.max(10, Math.min(15, w * 0.3))}px "Cinzel", serif`;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(keyLabel(CONFIG.keys[i]), x + w / 2, y + 3 + capH / 2);
+    }
+  }
+
+  /* ---- HOLD BODY -------------------------------------------------------
+   * The hard part. A hold spans a range of depth, and because scale is
+   * hyperbolic in z the body must not be a straight quad — it has to be
+   * subdivided. Sampling evenly in *scale* space (rather than in z) puts
+   * the samples at even screen distances, so 26 segments is plenty even
+   * for a long note that reaches the horizon. */
+  drawHoldBody(lane, zNear, zFar, opts = {}) {
+    const g = this.ctx;
+    const { dead = false, active = false, alpha = 1 } = opts;
+    const SEG = 26;
+
+    const sNear = this.scaleOf(Math.min(zNear, CONFIG.Z_CULL));
+    const sFar = this.scaleOf(Math.min(zFar, CONFIG.Z_CULL));
+    if (sNear - sFar < 0.0008) return;
+
+    const left = [], right = [];
+    for (let i = 0; i <= SEG; i++) {
+      const s = lerp(sNear, sFar, i / SEG);      // near → far
+      const y = this.yOf(s);
+      const c = this.cx + this.laneCx[lane] * s;
+      const hw = this.laneW * 0.30 * s;
+      left.push([c - hw, y]);
+      right.push([c + hw, y]);
+    }
+
+    g.save();
+    g.globalAlpha = alpha;
+
+    const yN = left[0][1], yF = left[SEG][1];
+    const body = g.createLinearGradient(0, yF, 0, yN);
+    if (dead) {
+      body.addColorStop(0, "rgba(90,82,74,.22)");
+      body.addColorStop(1, "rgba(120,110,100,.42)");
+    } else {
+      body.addColorStop(0, "rgba(255,238,196,.30)");
+      body.addColorStop(0.55, "rgba(255,243,214,.60)");
+      body.addColorStop(1, active ? "rgba(255,252,238,.95)" : "rgba(255,246,222,.80)");
+    }
+
+    g.beginPath();
+    g.moveTo(left[0][0], left[0][1]);
+    for (let i = 1; i <= SEG; i++) g.lineTo(left[i][0], left[i][1]);
+    for (let i = SEG; i >= 0; i--) g.lineTo(right[i][0], right[i][1]);
+    g.closePath();
+
+    if (!dead) { g.shadowColor = active ? "rgba(255,238,180,.95)" : "rgba(255,226,150,.55)"; g.shadowBlur = active ? 26 : 13; }
+    g.fillStyle = body;
+    g.fill();
+    g.shadowBlur = 0;
+
+    /* a bright filament down the middle sells the "glowing stream" */
+    if (!dead) {
+      g.beginPath();
+      g.moveTo(lerp(left[0][0], right[0][0], 0.5), left[0][1]);
+      for (let i = 1; i <= SEG; i++) g.lineTo(lerp(left[i][0], right[i][0], 0.5), left[i][1]);
+      const core = g.createLinearGradient(0, yF, 0, yN);
+      core.addColorStop(0, "rgba(255,255,255,0)");
+      core.addColorStop(1, "rgba(255,255,255,.75)");
+      g.strokeStyle = core;
+      g.lineWidth = Math.max(1, this.laneW * 0.06 * sNear);
+      g.stroke();
+    }
+
+    /* tail cap */
+    g.beginPath();
+    g.moveTo(left[SEG][0], left[SEG][1]);
+    g.lineTo(right[SEG][0], right[SEG][1]);
+    g.strokeStyle = dead ? "rgba(150,140,130,.5)" : "rgba(255,248,225,.85)";
+    g.lineWidth = Math.max(1, 2.4 * sFar);
+    g.stroke();
+
+    g.restore();
+  }
+
+  /** A tap note / hold head: an ivory key, drawn as a real 3D slab. */
+  drawKeyNote(lane, z, opts = {}) {
+    const g = this.ctx;
+    const { dead = false, alpha = 1, flash = 0, wide = 0.44 } = opts;
+    const sN = this.scaleOf(z);
+    const sF = this.scaleOf(z + CONFIG.NOTE_DEPTH);
+    if (sN <= 0.02) return;
+
+    const yN = this.yOf(sN), yF = this.yOf(sF);
+    const cN = this.cx + this.laneCx[lane] * sN, cF = this.cx + this.laneCx[lane] * sF;
+    const hN = this.laneW * wide * sN, hF = this.laneW * wide * sF;
+
+    const pts = [
+      { x: cN - hN, y: yN }, { x: cN + hN, y: yN },
+      { x: cF + hF, y: yF }, { x: cF - hF, y: yF },
+    ];
+
+    g.save();
+    g.globalAlpha = alpha;
+
+    /* contact shadow on the board */
+    if (!dead) {
+      g.fillStyle = "rgba(0,0,0,.35)";
+      roundPoly(g, pts.map(p => ({ x: p.x, y: p.y + 3 * sN })), 5 * sN);
+      g.fill();
+    }
+
+    const face = g.createLinearGradient(0, yF, 0, yN);
+    if (dead) {
+      face.addColorStop(0, "#5c564e"); face.addColorStop(1, "#8d867b");
+    } else {
+      face.addColorStop(0, "#ffffff");
+      face.addColorStop(0.42, "#fdf8ea");
+      face.addColorStop(0.75, "#efe6cf");
+      face.addColorStop(1, "#ffffff");
+    }
+    if (!dead) {
+      g.shadowColor = flash > 0 ? "rgba(255,247,214,1)" : "rgba(255,232,170,.75)";
+      g.shadowBlur = 12 + flash * 30;
+    }
+    roundPoly(g, pts, Math.max(1.5, 6 * sN));
+    g.fillStyle = face;
+    g.fill();
+    g.shadowBlur = 0;
+
+    /* brass lip along the leading edge */
+    if (!dead) {
+      g.beginPath();
+      g.moveTo(pts[0].x + 3 * sN, pts[0].y);
+      g.lineTo(pts[1].x - 3 * sN, pts[1].y);
+      g.strokeStyle = "rgba(201,162,39,.85)";
+      g.lineWidth = Math.max(1, 2.4 * sN);
+      g.stroke();
+    }
+    g.restore();
+  }
+}
+
+/* ---- small canvas helpers ------------------------------------------- */
+function roundRect(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+
+/** Rounded arbitrary polygon — used so trapezoids keep soft piano-key corners. */
+function roundPoly(g, pts, r) {
+  const n = pts.length;
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
+    const v1x = p0.x - p1.x, v1y = p0.y - p1.y;
+    const v2x = p2.x - p1.x, v2y = p2.y - p1.y;
+    const l1 = Math.hypot(v1x, v1y) || 1, l2 = Math.hypot(v2x, v2y) || 1;
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    const ax = p1.x + (v1x / l1) * rr, ay = p1.y + (v1y / l1) * rr;
+    const bx = p1.x + (v2x / l2) * rr, by = p1.y + (v2y / l2) * rr;
+    if (i === 0) g.moveTo(ax, ay); else g.lineTo(ax, ay);
+    g.quadraticCurveTo(p1.x, p1.y, bx, by);
+  }
+  g.closePath();
+}
+
+/* ---- procedural polished walnut ------------------------------------- */
+function makeWoodTexture(w, h) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  const img = g.createImageData(w, h);
+  const d = img.data;
+
+  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const vnoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), u),
+                lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), u), v);
+  };
+  const fbm = (x, y) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) { s += a * vnoise(x * f, y * f); a *= 0.5; f *= 2; } return s; };
+
+  const dark = [14, 8, 5], mid = [36, 21, 11], lite = [78, 49, 25];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      /* Grain runs lengthwise along the board (the v axis), so most of the
+         variation lives on the u axis — but the lines have to wander down
+         the length or they read as a printed barcode. */
+      const drift = fbm(x * 0.010, y * 0.0040) * 2.2;
+      const warp = fbm(x * 0.060, y * 0.0100) * 1.2;
+      const ring = Math.abs(Math.sin(x * 0.22 + drift + warp));
+      const fleck = vnoise(x * 1.1, y * 0.6) * 0.05;
+      let t = Math.pow(ring, 2.0) * 0.74 + fleck;
+      t = clamp(t, 0, 1);
+
+      const base = t < 0.5
+        ? [lerp(dark[0], mid[0], t * 2), lerp(dark[1], mid[1], t * 2), lerp(dark[2], mid[2], t * 2)]
+        : [lerp(mid[0], lite[0], (t - 0.5) * 2), lerp(mid[1], lite[1], (t - 0.5) * 2), lerp(mid[2], lite[2], (t - 0.5) * 2)];
+
+      const i = (y * w + x) * 4;
+      d[i] = base[0]; d[i + 1] = base[1]; d[i + 2] = base[2]; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+
+
+
+/* ===== js/input.js =================================================== */
+
+
+/* =========================================================================
+ *  INPUT  (js/input.js)
+ *  -------------------------------------------------------------------------
+ *  One abstraction for both worlds. Every physical source produces an
+ *  "input id": "k:s" for a key, "p:3" for pointer 3. A lane is considered
+ *  down while at least one id is on it, so two fingers on the same lane
+ *  can't double-trigger, and a chord across lanes just works.
+ * ======================================================================= */
+class InputManager {
+  constructor(target, renderer, { onPress, onRelease }) {
+    this.renderer = renderer;
+    this.onPress = onPress;
+    this.onRelease = onRelease;
+    this.laneHolders = [];
+    this.pointerLane = new Map();   // pointerId → lane
+    this.enabled = false;
+    this.rebuild();
+
+    /* ---- keyboard ---- */
+    window.addEventListener("keydown", (e) => {
+      if (e.repeat || isTypingInField()) return;
+      const lane = CONFIG.keys.indexOf(e.key.toLowerCase());
+      if (lane === -1) return;
+      e.preventDefault();
+      this.press(lane, "k:" + lane);
+    });
+    window.addEventListener("keyup", (e) => {
+      if (isTypingInField()) return;
+      const lane = CONFIG.keys.indexOf(e.key.toLowerCase());
+      if (lane === -1) return;
+      e.preventDefault();
+      this.release(lane, "k:" + lane);
+    });
+
+    /* ---- pointers (mouse + multi-touch, one code path) ----
+       touch-action:none on <body> is what makes simultaneous pointers
+       arrive here instead of being eaten by scroll/zoom. */
+    const down = (e) => {
+      const lane = this.laneFromPoint(e.clientX, e.clientY);
+      if (lane === -1) return;
+      e.preventDefault();
+      this.pointerLane.set(e.pointerId, lane);
+      this.press(lane, "p:" + e.pointerId);
+    };
+    const up = (e) => {
+      if (!this.pointerLane.has(e.pointerId)) return;
+      const lane = this.pointerLane.get(e.pointerId);
+      this.pointerLane.delete(e.pointerId);
+      this.release(lane, "p:" + e.pointerId);
+    };
+    /* Sliding between lanes: release the old lane, press the new one.
+       This is what makes fast trill patterns playable with one thumb. */
+    const move = (e) => {
+      if (!this.pointerLane.has(e.pointerId)) return;
+      const prev = this.pointerLane.get(e.pointerId);
+      const lane = this.laneFromPoint(e.clientX, e.clientY);
+      if (lane === -1 || lane === prev) return;
+      this.release(prev, "p:" + e.pointerId);
+      this.pointerLane.set(e.pointerId, lane);
+      this.press(lane, "p:" + e.pointerId);
+    };
+
+    target.addEventListener("pointerdown", down, { passive: false });
+    target.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+
+    /* belt and braces on iOS */
+    target.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+    target.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+    document.addEventListener("gesturestart", (e) => e.preventDefault());
+  }
+
+  /** Re-allocate the per-lane tables after the chart changes lane count. */
+  rebuild() {
+    this.laneHolders = Array.from({ length: CONFIG.laneCount }, () => new Set());
+    this.pointerLane.clear();
+  }
+
+  /** Which lane does a screen point fall in? Uses the perspective width at
+   *  that row, so the touch target matches the widening highway exactly. */
+  laneFromPoint(px, py) {
+    const r = this.renderer;
+    const TOUCH_TOP = r.horizonY + r.trackH * 0.42;    // lower portion only
+    if (py < TOUCH_TOP) return -1;
+    const s = clamp((py - r.horizonY) / r.trackH, 0.001, 1);
+    /* Below the hit line the lanes keep widening; clamp to scale 1 so the
+       key caps are hit-testable too. */
+    const sc = py > r.hitY ? 1 : s;
+    const local = (px - r.cx) / sc;
+    if (Math.abs(local) > r.halfW) return -1;
+    return clamp(Math.floor((local + r.halfW) / r.laneW), 0, CONFIG.laneCount - 1);
+  }
+
+  press(lane, id) {
+    if (!this.enabled) return;
+    const set = this.laneHolders[lane];
+    if (set.has(id)) return;
+    const wasEmpty = set.size === 0;
+    set.add(id);
+    if (wasEmpty) this.onPress(lane, id);
+  }
+
+  release(lane, id) {
+    const set = this.laneHolders[lane];
+    if (!set.delete(id)) return;
+    if (set.size === 0 && this.enabled) this.onRelease(lane, id);
+  }
+
+  isDown(lane) { return this.laneHolders[lane].size > 0; }
+
+  releaseAll() {
+    for (let i = 0; i < CONFIG.laneCount; i++) {
+      for (const id of [...this.laneHolders[i]]) this.release(i, id);
+      this.laneHolders[i].clear();
+    }
+    this.pointerLane.clear();
+  }
+}
+
+
+
+
+/* ===== js/recorder.js ================================================ */
+
+
+
+/* =========================================================================
+ *  RECORDER  (js/recorder.js)
+ *  -------------------------------------------------------------------------
+ *  Marking hundreds of timestamps by ear in a text editor is miserable, so
+ *  this plays your audio and records what you press. Tap a lane → a tap
+ *  note. Hold a lane → a hold note of exactly that length. Stop, and it
+ *  hands the notes to the Piano Roll editor (js/editor.js) for cleanup —
+ *  this pass only needs to be close, not perfect.
+ *
+ *  It records the *press* time straight from the AudioContext clock, so it
+ *  is as accurate as your own timing — which is why the quantiser below
+ *  matters more than you'd think.
+ * ======================================================================= */
+
+
+class Recorder {
+  /**
+   * @param {Conductor} conductor  supplies the song clock
+   */
+  constructor(conductor) {
+    this.conductor = conductor;
+    this.active = false;
+    this.notes = [];              // { lane, time, dur }
+    this.open = new Map();        // lane → press time, for notes in progress
+    this.bpm = 0;                 // 0 = no quantising
+    this.gridOffset = 0;          // seconds; where beat 0 sits in the audio
+    this.division = 4;            // snap to 1/4 of a beat (a 16th note)
+    this.onChange = () => {};
+  }
+
+  start() {
+    this.active = true;
+    this.notes = [];
+    this.open.clear();
+    this.onChange(this);
+  }
+
+  stop() {
+    /* close anything still held at the moment you hit stop */
+    const t = this.conductor.time;
+    for (const lane of [...this.open.keys()]) this.release(lane, t);
+    this.active = false;
+    this.onChange(this);
+  }
+
+  press(lane) {
+    if (!this.active) return;
+    this.open.set(lane, this.conductor.time);
+  }
+
+  release(lane, atTime) {
+    if (!this.active || !this.open.has(lane)) return;
+    const t0 = this.open.get(lane);
+    this.open.delete(lane);
+    const t1 = atTime !== undefined ? atTime : this.conductor.time;
+    const held = Math.max(0, t1 - t0);
+
+    const time = this.snap(t0);
+    let dur = held < CONFIG.MIN_HOLD ? 0 : this.snap(t0 + held) - time;
+    if (dur > 0 && dur < CONFIG.MIN_HOLD) dur = 0;   // snapping collapsed it
+
+    this.notes.push({ lane, time: Math.max(0, time), dur: Math.max(0, dur) });
+    this.onChange(this);
+  }
+
+  /** Remove the most recent note — bound to Backspace while recording. */
+  undo() {
+    this.notes.pop();
+    this.onChange(this);
+  }
+
+  /**
+   * Pull a time onto the beat grid. Human taps scatter by 20–50 ms; a
+   * quantised chart feels far tighter and is much easier to hand-edit
+   * afterwards. With bpm = 0 the raw time is kept.
+   */
+  snap(t) {
+    if (!this.bpm) return t;
+    const step = 60 / this.bpm / this.division;
+    return Math.round((t - this.gridOffset) / step) * step + this.gridOffset;
+  }
+
+  get count() { return this.notes.length; }
+  get holdCount() { return this.notes.filter((n) => n.dur > 0).length; }
+
+  /** Build the chart object, ready to be stringified and downloaded. */
+  toChart({ title = "Untitled", artist = "", audio = "assets/audio/my-song.mp3",
+            difficulty = "MASTER", level = 1, charter = "" } = {}) {
+    return serializeChart({
+      song: { title, artist, audio, offset: 0 },
+      chart: {
+        difficulty, level, charter,
+        lanes: CONFIG.laneCount,
+        scrollSpeed: 1,
+        targetScore: 950000,
+        bpm: this.bpm || 0,
+      },
+      notes: this.notes,
+    });
+  }
+
+  /** Trigger a browser download of the chart as a .json file. */
+  download(meta) {
+    const chart = this.toChart(meta);
+    const text = stringifyChart(chart);
+    const name = (meta && meta.title ? meta.title : "chart")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "chart";
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return text;
+  }
+}
+
+/**
+ * Estimate BPM from the gaps between recorded taps. Rough, but good enough
+ * to pre-fill the quantiser field so you aren't guessing from scratch.
+ */
+function guessBPM(notes) {
+  if (notes.length < 8) return 0;
+  const times = notes.map((n) => n.time).sort((a, b) => a - b);
+  const gaps = [];
+  for (let i = 1; i < times.length; i++) {
+    const g = times[i] - times[i - 1];
+    if (g > 0.08 && g < 2) gaps.push(g);
+  }
+  if (gaps.length < 6) return 0;
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)];
+  let bpm = 60 / median;
+  while (bpm < 70) bpm *= 2;          // fold into a musical range
+  while (bpm > 190) bpm /= 2;
+  return clamp(Math.round(bpm), 40, 300);
+}
+
+
+/* ===== js/editor.js ================================================== */
+
+
+/* =========================================================================
+ *  EDITOR  (js/editor.js)
+ *  -------------------------------------------------------------------------
+ *  A small MIDI-editor-style piano roll, scoped to exactly the game's lanes.
+ *  There's no separate "draw" or "select" tool — the cursor figures out what
+ *  you mean from where you press:
+ *
+ *    empty space, click        → add a tap
+ *    empty space, drag         → add a hold spanning the drag
+ *    a note's body             → select it; drag to move (time + lane)
+ *    a note's left/right edge  → drag to resize (cursor becomes ↔)
+ *    right-click a note        → delete it immediately
+ *    Delete / Backspace        → delete the current selection
+ *    Shift + drag empty space  → rubber-band select several notes
+ *    arrow keys                → nudge the selection by one grid step
+ *    Ctrl/Cmd + Z / Shift+Z    → undo / redo
+ *    space                     → play / pause
+ *    wheel                     → scroll; Ctrl/Cmd + wheel → zoom
+ *
+ *  The editor never touches game state or the chart file format — it just
+ *  holds a working array of { lane, time, dur } and hands it back through
+ *  getNotes(). js/game.js wraps that with chart.js's serializeChart() to
+ *  save or play it.
+ * ======================================================================= */
+
+const EDGE_PX = 9;            // resize hit-zone at each end of a note
+const CLICK_SLOP = 4;         // pointer movement under this = "didn't drag"
+const MIN_LANE_H = 46;
+const RULER_H = 26;
+const WAVE_H = 46;
+const GUTTER_W = 54;
+
+const COLOR = {
+  bg: "#100a06",
+  gutter: "#1a1108",
+  rowA: "rgba(255,246,225,.025)",
+  rowB: "rgba(255,246,225,.05)",
+  gridBeat: "rgba(255,246,225,.08)",
+  gridBar: "rgba(255,246,225,.22)",
+  wave: "rgba(240,220,154,.55)",
+  waveBg: "rgba(0,0,0,.35)",
+  playhead: "#f7e7a8",
+  tap: "#f6f1e3",
+  tapDim: "#a89a7c",
+  hold: "rgba(255,238,196,.85)",
+  holdCore: "rgba(255,255,255,.9)",
+  selected: "#7fe3c4",
+  overlap: "#d1616e",
+  marquee: "rgba(127,227,196,.18)",
+  marqueeEdge: "rgba(127,227,196,.7)",
+  label: "#c9a227",
+  labelDim: "rgba(201,162,39,.45)",
+};
+
+let uid = 1;
+
+class PianoRollEditor {
+  /** @param {HTMLCanvasElement} canvas
+   *  @param {Conductor} conductor  the same clock/audio the game plays with */
+  constructor(canvas, conductor) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.conductor = conductor;
+
+    this.notes = [];              // working set: { id, lane, time, dur }
+    this.selected = new Set();    // ids
+    this.laneCount = CONFIG.laneCount;
+
+    this.bpm = 0;
+    this.snap = true;
+    this.division = 4;
+
+    this.pxPerSec = 130;
+    this.scrollX = 0;             // seconds
+    this.cursorTime = 0;          // paused-position playhead
+    this.playing = false;
+    this.tickEnabled = true;
+    this._tickCursor = 0;
+
+    this.peaks = null;            // waveform, see buildPeaks()
+    this.duration = 0;
+
+    this.history = [];
+    this.future = [];
+
+    this.drag = null;             // active pointer interaction, or null
+    this.hover = null;            // { note, zone } under the pointer, idle
+    this.active = false;          // is this screen currently shown?
+    this._raf = null;
+
+    this.onChange = () => {};     // (editor) → update note-count / overlap UI
+    this.onTime = () => {};       // (seconds) → update the clock readout
+
+    this._bindEvents();
+    this.resize();
+    this._pushHistory(true);
+  }
+
+  /* =====================================================================
+   *  LOADING / EXPORTING
+   * =================================================================== */
+  /** @param {{lane,time,dur}[]} notes  @param {number} [laneCount] */
+  loadNotes(notes, laneCount) {
+    if (laneCount) this.laneCount = laneCount;
+    this.notes = notes.map((n) => ({ id: uid++, lane: n.lane, time: n.time, dur: n.dur || 0 }));
+    this.selected.clear();
+    this.history = []; this.future = [];
+    this._pushHistory(true);
+    this._fit();
+    this.onChange(this);
+  }
+
+  /** Plain { lane, time, dur }[], sorted, ready for chart.js. */
+  getNotes() {
+    return this.notes
+      .slice()
+      .sort((a, b) => a.time - b.time || a.lane - b.lane)
+      .map(({ lane, time, dur }) => ({ lane, time, dur }));
+  }
+
+  setAudioBuffer(buffer) {
+    this.duration = buffer ? buffer.duration : 0;
+    this.peaks = buffer ? buildPeaks(buffer) : null;
+  }
+
+  setLaneCount(n) {
+    this.laneCount = n;
+    for (const note of this.notes) note.lane = clamp(note.lane, 0, n - 1);
+    this.resize();
+  }
+
+  /* =====================================================================
+   *  LIFECYCLE
+   * =================================================================== */
+  start() {
+    this.active = true;
+    this.cursorTime = 0;
+    this.resize();
+    const loop = () => {
+      if (!this.active) return;
+      if (this.playing) {
+        const t = this.conductor.time;
+        this.onTime(t);
+        this._autoScroll(t);
+        this._tickThrough(t);
+        if (this.duration && t >= this.duration) this.pause();
+      }
+      this.render();
+      this._raf = requestAnimationFrame(loop);
+    };
+    this._raf = requestAnimationFrame(loop);
+  }
+
+  stop() {
+    this.active = false;
+    if (this.playing) this.pause();
+    if (this._raf) cancelAnimationFrame(this._raf);
+  }
+
+  play() {
+    if (this.playing) return;
+    this.playing = true;
+    this._tickCursor = this._noteIndexAt(this.cursorTime);
+    this.conductor.ensureContext();
+    this.conductor.start(this.cursorTime);
+  }
+
+  pause() {
+    if (!this.playing) return;
+    this.cursorTime = this.conductor.time;
+    this.conductor.pause();
+    this.playing = false;
+    this.onTime(this.cursorTime);
+  }
+
+  togglePlay() { this.playing ? this.pause() : this.play(); }
+
+  seek(t) {
+    t = clamp(t, 0, Math.max(this.duration, this._contentEnd()));
+    const wasPlaying = this.playing;
+    if (wasPlaying) this.conductor.pause();
+    this.cursorTime = t;
+    this._tickCursor = this._noteIndexAt(t);
+    this.onTime(t);
+    if (wasPlaying) this.conductor.start(t), (this.playing = true);
+  }
+
+  /* =====================================================================
+   *  RESIZE / COORDINATES
+   * =================================================================== */
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = this.canvas.clientWidth || 800;
+    const h = this.canvas.clientHeight || 400;
+    this.W = w; this.H = h;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    this.laneTop = RULER_H + WAVE_H;
+    this.laneH = Math.max(MIN_LANE_H, (h - this.laneTop) / this.laneCount);
+  }
+
+  timeToX(t) { return GUTTER_W + (t - this.scrollX) * this.pxPerSec; }
+  xToTime(x) { return this.scrollX + (x - GUTTER_W) / this.pxPerSec; }
+  laneToY(l) { return this.laneTop + l * this.laneH; }
+  yToLane(y) { return clamp(Math.floor((y - this.laneTop) / this.laneH), 0, this.laneCount - 1); }
+
+  snapTime(t) {
+    if (!this.snap || !this.bpm) return Math.max(0, t);
+    const step = 60 / this.bpm / this.division;
+    return Math.max(0, Math.round(t / step) * step);
+  }
+
+  /* =====================================================================
+   *  HISTORY
+   * =================================================================== */
+  _snapshot() {
+    return this.notes.map((n) => ({ id: n.id, lane: n.lane, time: n.time, dur: n.dur }));
+  }
+  _pushHistory(replace = false) {
+    if (replace) this.history[this.history.length - 1] = this._snapshot();
+    else this.history.push(this._snapshot());
+    if (this.history.length > 200) this.history.shift();
+    this.future = [];
+    this.onChange(this);
+  }
+  undo() {
+    if (this.history.length < 2) return;
+    this.future.push(this.history.pop());
+    this.notes = this.history[this.history.length - 1].map((n) => ({ ...n }));
+    this.selected.clear();
+    this.onChange(this);
+  }
+  redo() {
+    if (!this.future.length) return;
+    const snap = this.future.pop();
+    this.history.push(snap);
+    this.notes = snap.map((n) => ({ ...n }));
+    this.selected.clear();
+    this.onChange(this);
+  }
+
+  /* =====================================================================
+   *  NOTE OPERATIONS
+   * =================================================================== */
+  addNote(lane, time, dur = 0) {
+    const note = { id: uid++, lane: clamp(lane, 0, this.laneCount - 1), time: Math.max(0, time), dur: Math.max(0, dur) };
+    this.notes.push(note);
+    this._pushHistory();
+    this._tick(dur > 0);
+    return note;
+  }
+
+  deleteNote(id) {
+    this.notes = this.notes.filter((n) => n.id !== id);
+    this.selected.delete(id);
+    this._pushHistory();
+  }
+
+  deleteSelected() {
+    if (!this.selected.size) return;
+    this.notes = this.notes.filter((n) => !this.selected.has(n.id));
+    this.selected.clear();
+    this._pushHistory();
+  }
+
+  nudgeSelected(dTime, dLane) {
+    if (!this.selected.size) return;
+    const step = this.bpm && this.snap ? 60 / this.bpm / this.division : 0.02;
+    for (const n of this.notes) {
+      if (!this.selected.has(n.id)) continue;
+      if (dTime) n.time = Math.max(0, n.time + dTime * step);
+      if (dLane) n.lane = clamp(n.lane + dLane, 0, this.laneCount - 1);
+    }
+    this._pushHistory();
+  }
+
+  /** ids of notes that overlap another note sharing their lane. */
+  overlaps() {
+    const bad = new Set();
+    const byLane = Array.from({ length: this.laneCount }, () => []);
+    for (const n of this.notes) byLane[n.lane].push(n);
+    for (const list of byLane) {
+      list.sort((a, b) => a.time - b.time);
+      for (let i = 1; i < list.length; i++) {
+        if (list[i].time < list[i - 1].time + list[i - 1].dur - 1e-6) {
+          bad.add(list[i].id); bad.add(list[i - 1].id);
+        }
+      }
+    }
+    return bad;
+  }
+
+  /* =====================================================================
+   *  HIT TESTING
+   * =================================================================== */
+  /** @returns {{note, zone: "body"|"left"|"right"} | null} */
+  hitTest(x, y) {
+    const lane = this.yToLane(y);
+    if (y < this.laneTop) return null;
+    for (let i = this.notes.length - 1; i >= 0; i--) {
+      const n = this.notes[i];
+      if (n.lane !== lane) continue;
+      const x0 = this.timeToX(n.time);
+      const x1 = this.timeToX(n.time + n.dur);
+      const w = Math.max(x1 - x0, 12);
+      const left = x0 - 3, right = Math.max(x1, x0 + w) + 3;
+      if (x < left || x > right) continue;
+      if (n.dur > 0 && x <= left + EDGE_PX) return { note: n, zone: "left" };
+      if (n.dur > 0 && x >= right - EDGE_PX) return { note: n, zone: "right" };
+      if (n.dur === 0 && x >= right - EDGE_PX) return { note: n, zone: "right" }; // drag-to-extend a tap
+      return { note: n, zone: "body" };
+    }
+    return null;
+  }
+
+  _noteIndexAt(t) {
+    const sorted = this.notes.slice().sort((a, b) => a.time - b.time);
+    let i = 0;
+    while (i < sorted.length && sorted[i].time < t) i++;
+    return i;
+  }
+
+  /* =====================================================================
+   *  POINTER / KEYBOARD
+   * =================================================================== */
+  _bindEvents() {
+    const c = this.canvas;
+
+    c.addEventListener("pointerdown", (e) => this._onDown(e));
+    c.addEventListener("pointermove", (e) => this._onMove(e));
+    c.addEventListener("pointerup", (e) => this._onUp(e));
+    c.addEventListener("pointercancel", (e) => this._onUp(e));
+    c.addEventListener("contextmenu", (e) => {
+      if (!this.active) return;
+      e.preventDefault();
+      const hit = this.hitTest(...this._local(e));
+      if (hit) { this.deleteNote(hit.note.id); this.render(); }
+    });
+    c.addEventListener("wheel", (e) => {
+      if (!this.active) return;
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const [x] = this._local(e);
+        const before = this.xToTime(x);
+        this.pxPerSec = clamp(this.pxPerSec * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 8, 1200);
+        this.scrollX = before - (x - GUTTER_W) / this.pxPerSec;
+      } else {
+        const delta = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) / this.pxPerSec;
+        this.scrollX += delta;
+      }
+      this.scrollX = Math.max(0, this.scrollX);
+    }, { passive: false });
+
+    window.addEventListener("keydown", (e) => this._onKey(e));
+  }
+
+  _local(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  _onDown(e) {
+    if (!this.active || e.button === 2) return;
+    const [x, y] = this._local(e);
+    this.canvas.setPointerCapture(e.pointerId);
+
+    if (y < RULER_H + WAVE_H) {
+      const wasPlaying = this.playing;
+      this.drag = { kind: "scrub", wasPlaying, x0: x, y0: y };
+      this.seek(this.xToTime(Math.max(GUTTER_W, x)));
+      return;
+    }
+    if (x < GUTTER_W) return;
+
+    const hit = this.hitTest(x, y);
+
+    if (hit && !e.shiftKey) {
+      if (!this.selected.has(hit.note.id)) { this.selected.clear(); this.selected.add(hit.note.id); }
+      const zone = hit.zone;
+      this.drag = {
+        kind: zone === "body" ? "move" : zone === "left" ? "resize-left" : "resize-right",
+        x0: x, y0: y, moved: false,
+        origin: this.notes.filter((n) => this.selected.has(n.id)).map((n) => ({ id: n.id, lane: n.lane, time: n.time, dur: n.dur })),
+      };
+      return;
+    }
+
+    if (hit && e.shiftKey) {
+      hit.note && (this.selected.has(hit.note.id) ? this.selected.delete(hit.note.id) : this.selected.add(hit.note.id));
+      this.drag = { kind: "none" };
+      return;
+    }
+
+    if (e.shiftKey) {
+      this.drag = { kind: "marquee", x0: x, y0: y, x1: x, y1: y, additive: true };
+      return;
+    }
+
+    /* empty space: click adds a tap, drag stretches it into a hold */
+    const lane = this.yToLane(y);
+    const time = this.snapTime(this.xToTime(x));
+    this.selected.clear();
+    this.drag = { kind: "draw", lane, startTime: time, x0: x, y0: y, moved: false };
+  }
+
+  _onMove(e) {
+    if (!this.active) return;
+    const [x, y] = this._local(e);
+
+    if (!this.drag) {
+      this.hover = this.hitTest(x, y);
+      this.canvas.style.cursor =
+        y < RULER_H + WAVE_H ? "pointer" :
+        this.hover?.zone === "left" || this.hover?.zone === "right" ? "ew-resize" :
+        this.hover?.zone === "body" ? "grab" : "crosshair";
+      return;
+    }
+
+    const moved = Math.abs(x - this.drag.x0) > CLICK_SLOP || Math.abs(y - this.drag.y0) > CLICK_SLOP;
+    if (moved) this.drag.moved = true;
+
+    switch (this.drag.kind) {
+      case "scrub":
+        this.seek(this.xToTime(Math.max(GUTTER_W, x)));
+        break;
+
+      case "draw": {
+        const t = this.snapTime(this.xToTime(x));
+        this._previewDraw = { lane: this.drag.lane, time: Math.min(this.drag.startTime, t), dur: Math.abs(t - this.drag.startTime) };
+        break;
+      }
+
+      case "move": {
+        const dt = this.snapTime(this.xToTime(x)) - this.snapTime(this.xToTime(this.drag.x0));
+        const dLane = this.yToLane(y) - this.yToLane(this.drag.y0);
+        for (const o of this.drag.origin) {
+          const n = this.notes.find((n) => n.id === o.id);
+          if (!n) continue;
+          n.time = Math.max(0, o.time + dt);
+          n.lane = clamp(o.lane + dLane, 0, this.laneCount - 1);
+        }
+        break;
+      }
+
+      case "resize-right": {
+        const o = this.drag.origin[0];
+        const n = this.notes.find((n) => n.id === o.id);
+        if (n) {
+          const t = this.snapTime(this.xToTime(x));
+          n.dur = Math.max(0, t - o.time);
+        }
+        break;
+      }
+
+      case "resize-left": {
+        const o = this.drag.origin[0];
+        const n = this.notes.find((n) => n.id === o.id);
+        if (n) {
+          const t = Math.min(this.snapTime(this.xToTime(x)), o.time + o.dur - 0.02);
+          n.time = Math.max(0, t);
+          n.dur = Math.max(0, o.time + o.dur - n.time);
+        }
+        break;
+      }
+
+      case "marquee":
+        this.drag.x1 = x; this.drag.y1 = y;
+        break;
+    }
+  }
+
+  _onUp(e) {
+    if (!this.drag) return;
+    const d = this.drag;
+
+    if (d.kind === "draw") {
+      if (d.moved && this._previewDraw && this._previewDraw.dur >= CONFIG.MIN_HOLD) {
+        const p = this._previewDraw;
+        this.addNote(p.lane, p.time, p.dur);
+      } else {
+        this.addNote(d.lane, d.startTime, 0);
+      }
+      this._previewDraw = null;
+    } else if (d.kind === "move" || d.kind === "resize-left" || d.kind === "resize-right") {
+      if (d.moved) {
+        /* a resize that shrank a hold below the playable minimum becomes a tap */
+        for (const o of d.origin) {
+          const n = this.notes.find((n) => n.id === o.id);
+          if (n && n.dur > 0 && n.dur < CONFIG.MIN_HOLD) n.dur = 0;
+        }
+        this._pushHistory();
+      }
+    } else if (d.kind === "marquee") {
+      const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1);
+      const y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1);
+      if (!d.additive) this.selected.clear();
+      for (const n of this.notes) {
+        const nx0 = this.timeToX(n.time), nx1 = this.timeToX(n.time + n.dur) + 12;
+        const ny = this.laneToY(n.lane);
+        if (nx1 >= x0 && nx0 <= x1 && ny + this.laneH >= y0 && ny <= y1) this.selected.add(n.id);
+      }
+    } else if (d.kind === "scrub") {
+      /* handled live in _onDown/_onMove */
+    }
+
+    this.drag = null;
+    this.canvas.releasePointerCapture?.(e.pointerId);
+  }
+
+  _onKey(e) {
+    if (!this.active || isTypingInField()) return;
+
+    if (e.code === "Space") { e.preventDefault(); this.togglePlay(); return; }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      e.shiftKey ? this.redo() : this.undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); this.redo(); return; }
+
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); this.deleteSelected(); return; }
+
+    if (e.key === "ArrowLeft") { e.preventDefault(); this.nudgeSelected(-1, 0); return; }
+    if (e.key === "ArrowRight") { e.preventDefault(); this.nudgeSelected(1, 0); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); this.nudgeSelected(0, -1); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); this.nudgeSelected(0, 1); return; }
+
+    if (e.key === "Home") { e.preventDefault(); this.scrollX = 0; return; }
+    if (e.key === "End") { e.preventDefault(); this.fitToContent(); return; }
+    if (e.key === "Escape") { this.selected.clear(); return; }
+  }
+
+  /* =====================================================================
+   *  VIEW HELPERS
+   * =================================================================== */
+  _contentEnd() {
+    return this.notes.reduce((m, n) => Math.max(m, n.time + n.dur), 0) + 2;
+  }
+
+  _fit() { this.fitToContent(); }
+
+  fitToContent() {
+    const end = Math.max(this.duration, this._contentEnd(), 8);
+    this.scrollX = 0;
+    this.pxPerSec = clamp((this.W - GUTTER_W - 24) / end, 8, 1200);
+  }
+
+  _autoScroll(t) {
+    const rightEdge = this.scrollX + (this.W - GUTTER_W) / this.pxPerSec;
+    if (t > rightEdge - (this.W - GUTTER_W) / this.pxPerSec * 0.12) {
+      this.scrollX = t - (this.W - GUTTER_W) / this.pxPerSec * 0.22;
+    } else if (t < this.scrollX) {
+      this.scrollX = Math.max(0, t - 1);
+    }
+  }
+
+  _tick(strong) {
+    if (!this.tickEnabled) return;
+    try {
+      this.conductor.ensureContext();
+      const ctx = this.conductor.ctx;
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = strong ? 1760 : 1320;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.11, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + 0.06);
+    } catch (e) { /* audio not unlocked yet — silently skip */ }
+  }
+
+  _tickThrough(t) {
+    const sorted = this.notes.slice().sort((a, b) => a.time - b.time);
+    while (this._tickCursor < sorted.length && sorted[this._tickCursor].time <= t) {
+      this._tick(sorted[this._tickCursor].dur > 0);
+      this._tickCursor++;
+    }
+  }
+
+  /* =====================================================================
+   *  RENDER
+   * =================================================================== */
+  render() {
+    const g = this.ctx, W = this.W, H = this.H;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = COLOR.bg;
+    g.fillRect(0, 0, W, H);
+
+    const t0 = this.scrollX, t1 = this.scrollX + (W - GUTTER_W) / this.pxPerSec;
+
+    this._drawLaneRows(g, t0, t1);
+    this._drawGrid(g, t0, t1);
+    this._drawWave(g, t0, t1);
+    this._drawNotes(g);
+    this._drawMarquee(g);
+    this._drawRuler(g, t0, t1);
+    this._drawGutter(g);
+    this._drawPlayhead(g);
+
+    if (!this.notes.length && !this._previewDraw) {
+      g.fillStyle = "rgba(207,198,176,.5)";
+      g.font = "italic 15px 'Cormorant Garamond', Georgia, serif";
+      g.textAlign = "center";
+      g.fillText("Click a lane to add a note. Drag to make it a hold.", W / 2, this.laneTop + (H - this.laneTop) / 2);
+    }
+  }
+
+  _drawLaneRows(g, t0, t1) {
+    for (let i = 0; i < this.laneCount; i++) {
+      g.fillStyle = i % 2 ? COLOR.rowB : COLOR.rowA;
+      g.fillRect(GUTTER_W, this.laneToY(i), this.W - GUTTER_W, this.laneH);
+    }
+    g.strokeStyle = "rgba(255,246,225,.08)";
+    g.lineWidth = 1;
+    for (let i = 0; i <= this.laneCount; i++) {
+      const y = Math.round(this.laneToY(i)) + 0.5;
+      g.beginPath(); g.moveTo(GUTTER_W, y); g.lineTo(this.W, y); g.stroke();
+    }
+  }
+
+  _drawGrid(g, t0, t1) {
+    const bottom = this.laneToY(this.laneCount);
+    if (this.bpm > 0) {
+      const beat = 60 / this.bpm;
+      const step = beat / this.division;
+      const start = Math.floor(t0 / step) * step;
+      let bar = Math.round(start / beat);
+      for (let t = start; t <= t1; t += step) {
+        const x = Math.round(this.timeToX(t)) + 0.5;
+        const onBeat = Math.abs(t / beat - Math.round(t / beat)) < 1e-6;
+        const onBar = onBeat && Math.round(t / beat) % 4 === 0;
+        g.strokeStyle = onBar ? COLOR.gridBar : onBeat ? COLOR.gridBeat : "rgba(255,246,225,.045)";
+        g.lineWidth = onBar ? 1.4 : 1;
+        g.beginPath(); g.moveTo(x, RULER_H); g.lineTo(x, bottom); g.stroke();
+      }
+    } else {
+      const start = Math.floor(t0);
+      for (let t = start; t <= t1; t += 0.5) {
+        const x = Math.round(this.timeToX(t)) + 0.5;
+        const whole = Math.abs(t - Math.round(t)) < 1e-6;
+        g.strokeStyle = whole ? COLOR.gridBeat : "rgba(255,246,225,.045)";
+        g.lineWidth = whole ? 1.2 : 1;
+        g.beginPath(); g.moveTo(x, RULER_H); g.lineTo(x, bottom); g.stroke();
+      }
+    }
+  }
+
+  _drawWave(g, t0, t1) {
+    g.fillStyle = COLOR.waveBg;
+    g.fillRect(GUTTER_W, RULER_H, this.W - GUTTER_W, WAVE_H);
+    if (!this.peaks) {
+      g.fillStyle = "rgba(207,198,176,.4)";
+      g.font = "12px 'Cinzel', serif";
+      g.textAlign = "left";
+      g.fillText("no audio loaded", GUTTER_W + 10, RULER_H + WAVE_H / 2 + 4);
+      return;
+    }
+    const { min, max, sps } = this.peaks;
+    const midY = RULER_H + WAVE_H / 2;
+    const amp = WAVE_H / 2 - 3;
+    g.strokeStyle = COLOR.wave;
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let x = GUTTER_W; x < this.W; x++) {
+      const t = this.xToTime(x);
+      const idx = Math.floor(t * sps);
+      if (idx < 0 || idx >= min.length) continue;
+      g.moveTo(x + 0.5, midY - max[idx] * amp);
+      g.lineTo(x + 0.5, midY - min[idx] * amp);
+    }
+    g.stroke();
+  }
+
+  _drawNotes(g) {
+    const overlapping = this.overlaps();
+    const draw = (n, selected) => {
+      const x0 = this.timeToX(n.time);
+      const x1 = n.dur > 0 ? this.timeToX(n.time + n.dur) : x0 + 15;
+      const y = this.laneToY(n.lane) + 5;
+      const h = this.laneH - 10;
+      const bad = overlapping.has(n.id);
+
+      if (n.dur > 0) {
+        const grad = g.createLinearGradient(0, y, 0, y + h);
+        grad.addColorStop(0, COLOR.hold);
+        grad.addColorStop(1, "rgba(255,246,222,.55)");
+        g.fillStyle = grad;
+        roundRectPath(g, x0, y, Math.max(x1 - x0, 12), h, 5);
+        g.fill();
+        g.strokeStyle = COLOR.holdCore;
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x0 + 4, y + h / 2); g.lineTo(x1 - 4, y + h / 2); g.stroke();
+        /* resize handles */
+        g.fillStyle = "rgba(43,27,16,.55)";
+        roundRectPath(g, x1 - 6, y + 2, 5, h - 4, 2); g.fill();
+        roundRectPath(g, x0 + 1, y + 2, 5, h - 4, 2); g.fill();
+      } else {
+        g.fillStyle = bad ? COLOR.overlap : COLOR.tap;
+        roundRectPath(g, x0, y, 15, h, 4);
+        g.fill();
+      }
+
+      if (bad) { g.strokeStyle = COLOR.overlap; g.lineWidth = 2; roundRectPath(g, x0 - 1, y - 1, Math.max(x1 - x0, 15) + 2, h + 2, 5); g.stroke(); }
+      if (selected) { g.strokeStyle = COLOR.selected; g.lineWidth = 2; roundRectPath(g, x0 - 2, y - 2, Math.max(x1 - x0, 15) + 4, h + 4, 6); g.stroke(); }
+    };
+
+    for (const n of this.notes) if (!this.selected.has(n.id)) draw(n, false);
+    for (const n of this.notes) if (this.selected.has(n.id)) draw(n, true);
+
+    if (this._previewDraw) {
+      const p = this._previewDraw;
+      const x0 = this.timeToX(p.time), x1 = this.timeToX(p.time + p.dur);
+      const y = this.laneToY(p.lane) + 5, h = this.laneH - 10;
+      g.fillStyle = "rgba(247,231,168,.55)";
+      roundRectPath(g, x0, y, Math.max(x1 - x0, 15), h, 5);
+      g.fill();
+    }
+  }
+
+  _drawMarquee(g) {
+    const d = this.drag;
+    if (!d || d.kind !== "marquee") return;
+    const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1);
+    const y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1);
+    g.fillStyle = COLOR.marquee;
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    g.strokeStyle = COLOR.marqueeEdge;
+    g.lineWidth = 1;
+    g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+  }
+
+  _drawRuler(g, t0, t1) {
+    g.fillStyle = COLOR.gutter;
+    g.fillRect(GUTTER_W, 0, this.W - GUTTER_W, RULER_H);
+    g.strokeStyle = "rgba(255,246,225,.15)";
+    g.beginPath(); g.moveTo(GUTTER_W, RULER_H + 0.5); g.lineTo(this.W, RULER_H + 0.5); g.stroke();
+
+    g.fillStyle = COLOR.label;
+    g.font = "10px 'Cinzel', serif";
+    g.textAlign = "left";
+
+    if (this.bpm > 0) {
+      const beat = 60 / this.bpm;
+      const startBar = Math.floor(t0 / beat / 4) * 4;
+      for (let b = startBar; b * beat <= t1; b += 4) {
+        const t = b * beat;
+        if (t < t0 - beat) continue;
+        const x = this.timeToX(t);
+        g.fillText(String(b / 4 + 1), x + 3, 17);
+      }
+    } else {
+      const start = Math.floor(t0);
+      for (let s = start; s <= t1; s++) {
+        const x = this.timeToX(s);
+        g.fillText(formatClock(s), x + 3, 17);
+      }
+    }
+  }
+
+  _drawGutter(g) {
+    g.fillStyle = COLOR.gutter;
+    g.fillRect(0, 0, GUTTER_W, this.H);
+    for (let i = 0; i < this.laneCount; i++) {
+      const y = this.laneToY(i);
+      g.fillStyle = "rgba(255,246,225,.06)";
+      g.fillRect(2, y + 4, GUTTER_W - 8, this.laneH - 8);
+      g.fillStyle = COLOR.label;
+      g.font = "600 13px 'Cinzel', serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      const label = CONFIG.keys[i] === " " ? "\u2423" : CONFIG.keys[i].toUpperCase();
+      g.fillText(label, GUTTER_W / 2, y + this.laneH / 2);
+    }
+    g.textBaseline = "alphabetic";
+  }
+
+  _drawPlayhead(g) {
+    const t = this.playing ? this.conductor.time : this.cursorTime;
+    const x = this.timeToX(t);
+    if (x < GUTTER_W - 2 || x > this.W) return;
+    g.strokeStyle = COLOR.playhead;
+    g.lineWidth = 1.6;
+    g.shadowColor = COLOR.playhead; g.shadowBlur = 6;
+    g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, this.laneToY(this.laneCount)); g.stroke();
+    g.shadowBlur = 0;
+    g.fillStyle = COLOR.playhead;
+    g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 7); g.closePath(); g.fill();
+  }
+}
+
+/* ---- helpers ---------------------------------------------------------- */
+function roundRectPath(g, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+
+function formatClock(s) {
+  const m = Math.floor(s / 60);
+  return m + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+}
+
+/**
+ * Downsample an AudioBuffer into min/max peak pairs, sampled at a fixed
+ * rate (independent of zoom), so drawing the waveform is just an array
+ * lookup per screen pixel rather than re-scanning raw samples every frame.
+ */
+function buildPeaks(buffer, sps = 200) {
+  const ch = buffer.getChannelData(0);
+  const step = Math.max(1, Math.floor(buffer.sampleRate / sps));
+  const n = Math.ceil(ch.length / step);
+  const min = new Float32Array(n), max = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let lo = 1, hi = -1;
+    const start = i * step, end = Math.min(ch.length, start + step);
+    for (let j = start; j < end; j++) {
+      const v = ch[j];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    min[i] = lo; max[i] = hi;
+  }
+  return { min, max, sps };
+}
+
+
+/* ===== js/game.js ==================================================== */
+
+
+
+
+
+
+
+
+/* =========================================================================
+ *  GAME  (js/game.js)
+ *  -------------------------------------------------------------------------
+ *  States: menu → playing ⇄ paused → done
+ *          menu → recording → menu
+ * ======================================================================= */
+class Game {
+  constructor() {
+    this.canvas = document.getElementById("game");
+    this.renderer = new Renderer(this.canvas);
+    this.conductor = new Conductor();
+    this.recorder = new Recorder(this.conductor);
+    this.editor = new PianoRollEditor(document.getElementById("editorCanvas"), this.conductor);
+    this.speedIndex = SPEEDS.indexOf(1);
+
+    this.chart = null;          // { song, chart, notes, errors, warnings }
+    this.notes = [];
+    this.effects = [];
+    this.lanePress = new Array(CONFIG.laneCount).fill(0);
+    this.state = "menu";
+    this.hitPulse = 0;
+    this.liveOffset = 0;        // nudged from the pause screen, on top of song.offset
+
+    this.input = new InputManager(this.canvas, this.renderer, {
+      onPress: (lane) => this.handlePress(lane),
+      onRelease: (lane) => this.handleRelease(lane),
+    });
+
+    this.ui = {
+      judgment: document.getElementById("judgment"),
+      comboWrap: document.getElementById("comboWrap"),
+      comboNum: document.getElementById("comboNum"),
+      scoreBig: document.getElementById("scoreBig"),
+      myScore: document.getElementById("myScore"),
+      maxCombo: document.getElementById("maxCombo"),
+      goalBar: document.getElementById("goalBar"),
+      targetScore: document.getElementById("targetScore"),
+      medals: [document.getElementById("medal1"), document.getElementById("medal2")],
+      speedBtn: document.getElementById("speedBtn"),
+      difficulty: document.getElementById("difficulty"),
+      songArtist: document.getElementById("songArtist"),
+      songTitle: document.getElementById("songTitle"),
+    };
+
+    this.bindUI();
+    window.addEventListener("resize", () => { this.renderer.resize(); this.editor.resize(); });
+    window.addEventListener("orientationchange", () => setTimeout(() => { this.renderer.resize(); this.editor.resize(); }, 120));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && this.state === "playing") this.pause();
+    });
+
+    requestAnimationFrame(this.loop);
+  }
+
+  /* =====================================================================
+   *  CHART LOADING
+   * =================================================================== */
+
+  /**
+   * Apply a parsed chart. Returns false (and lists why) if it can't be
+   * played, so a typo in the JSON names the offending note instead of
+   * crashing the game.
+   */
+  loadChart(parsed) {
+    const box = document.getElementById("chartReport");
+    box.innerHTML = "";
+    const say = (cls, msg) => {
+      const li = document.createElement("li");
+      li.className = cls;
+      li.textContent = msg;
+      box.appendChild(li);
+    };
+    parsed.errors.slice(0, 8).forEach((e) => say("bad", e));
+    if (parsed.errors.length > 8) say("bad", `…and ${parsed.errors.length - 8} more problems.`);
+    parsed.warnings.slice(0, 5).forEach((w) => say("warn", w));
+
+    if (parsed.errors.length) {
+      document.getElementById("setupPlayBtn").disabled = true;
+      return false;
+    }
+
+    this.chart = parsed;
+    this.liveOffset = 0;
+
+    /* Lane layout can change per chart, and both the renderer and the input
+       layer cache per-lane arrays, so both have to be rebuilt. */
+    if (parsed.chart.lanes !== CONFIG.laneCount) {
+      setLaneCount(parsed.chart.lanes);
+      this.input.rebuild();
+      this.renderer.resize();
+      this.lanePress = new Array(CONFIG.laneCount).fill(0);
+    }
+
+    CONFIG.TARGET_SCORE = parsed.chart.targetScore;
+    const si = SPEEDS.indexOf(parsed.chart.scrollSpeed);
+    this.speedIndex = si === -1 ? SPEEDS.indexOf(1) : si;
+    this.ui.speedBtn.textContent = SPEEDS[this.speedIndex] + "X";
+
+    this.ui.songArtist.textContent = parsed.song.artist || "";
+    this.ui.songTitle.textContent = parsed.song.title || "Untitled";
+    this.ui.difficulty.textContent =
+      (parsed.chart.difficulty || "MASTER") + (parsed.chart.level ? " " + parsed.chart.level : "");
+    this.ui.targetScore.textContent = CONFIG.TARGET_SCORE.toLocaleString();
+
+    const taps = parsed.notes.filter((n) => n.dur === 0).length;
+    const holds = parsed.notes.length - taps;
+    const last = parsed.notes[parsed.notes.length - 1];
+    say("ok", `${parsed.notes.length} notes · ${taps} taps · ${holds} holds · ` +
+              `${parsed.chart.lanes} lanes · last note at ${fmtTime(last.time + last.dur)}`);
+
+    document.getElementById("setupPlayBtn").disabled = false;
+    this.reset();
+    return true;
+  }
+
+  async loadChartFromFile(file) {
+    try {
+      return this.loadChart(await loadChartFile(file));
+    } catch (err) {
+      return this.loadChart({ song: {}, chart: {}, notes: [], warnings: [],
+                              errors: ["That file isn't valid JSON — " + err.message] });
+    }
+  }
+
+  async loadChartFromURL(url) {
+    try {
+      return this.loadChart(await loadChartURL(url));
+    } catch (err) {
+      return this.loadChart({ song: {}, chart: {}, notes: [], warnings: [], errors: [err.message] });
+    }
+  }
+
+  /* =====================================================================
+   *  UI WIRING
+   * =================================================================== */
+  bindUI() {
+    const $ = (id) => document.getElementById(id);
+
+    /* ---- audio ---- */
+    $("audioFile").onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      this._audioFileName = f.name;
+      $("audioName").textContent = "decoding…";
+      $("audioName").className = "slot-value";
+      try {
+        await this.conductor.loadFile(f);
+        $("audioName").textContent = `${f.name} · ${fmtTime(this.conductor.duration)}`;
+        $("audioName").className = "slot-value ok";
+        if (this.chart) this.reset();
+      } catch (err) {
+        $("audioName").textContent = "couldn't decode that — try MP3, OGG, WAV or M4A";
+        $("audioName").className = "slot-value bad";
+      }
+    };
+
+    /* ---- chart ---- */
+    $("chartFile").onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const okay = await this.loadChartFromFile(f);
+      $("chartName").textContent = okay ? f.name : f.name + " — see below";
+      $("chartName").className = "slot-value " + (okay ? "ok" : "bad");
+    };
+
+    $("demoBtn").onclick = async () => {
+      /* DEMO_CHART is inlined above */
+      this.loadChart(parseChart(DEMO_CHART));
+      $("chartName").textContent = "built-in demo — Alla Hornpipe";
+      $("chartName").className = "slot-value ok";
+    };
+
+    $("setupPlayBtn").onclick = () => this.startRun();
+
+    /* ---- transport ---- */
+    $("pauseBtn").onclick = () => {
+      if (this.state === "playing") this.pause();
+      else if (this.state === "paused") this.resume();
+      else if (this.state === "recording") this.stopRecording();
+    };
+    $("resumeBtn").onclick = () => this.resume();
+    $("restartBtn").onclick = () => { this.reset(); this.startRun(); };
+    $("quitBtn").onclick = () => this.toMenu();
+    $("againBtn").onclick = () => { this.reset(); this.startRun(); };
+    $("menuBtn").onclick = () => this.toMenu();
+
+    this.ui.speedBtn.onclick = () => {
+      this.speedIndex = (this.speedIndex + 1) % SPEEDS.length;
+      this.ui.speedBtn.textContent = SPEEDS[this.speedIndex] + "X";
+    };
+
+    /* ---- live offset calibration ---- */
+    this._showOffset = () => {
+      $("offsetValue").textContent =
+        (this.liveOffset >= 0 ? "+" : "") + Math.round(this.liveOffset * 1000) + " ms";
+    };
+    $("offsetMinus").onclick = () => { this.nudgeOffset(-0.005); this._showOffset(); };
+    $("offsetPlus").onclick = () => { this.nudgeOffset(+0.005); this._showOffset(); };
+
+    /* ---- recorder ---- */
+    $("recordBtn").onclick = () => {
+      if (!this.conductor.buffer) {
+        $("audioName").textContent = "load an audio file first — the recorder needs something to play";
+        $("audioName").className = "slot-value bad";
+        return;
+      }
+      $("startScreen").hidden = true;
+      $("recordSetup").hidden = false;
+    };
+    $("recCancelBtn").onclick = () => { $("recordSetup").hidden = true; $("startScreen").hidden = false; };
+    $("recStartBtn").onclick = () => this.startRecording();
+    $("recStopBtn").onclick = () => this.stopRecording();
+    $("recUndoBtn").onclick = () => this.recorder.undo();
+
+    this.recorder.onChange = (r) => {
+      $("recCount").textContent = r.count;
+      $("recHolds").textContent = r.holdCount;
+    };
+
+    /* ---- piano roll editor ---- */
+    $("editBtn").onclick = () => this.openEditor();
+    this.bindEditorUI();
+
+    /* ---- keyboard shortcuts ---- */
+    window.addEventListener("keydown", (e) => {
+      if (isTypingInField()) return;
+      if (e.key === "Escape") {
+        if (this.state === "playing") this.pause();
+        else if (this.state === "paused") this.resume();
+        else if (this.state === "recording") this.stopRecording();
+      }
+      if (e.key === "Backspace" && this.state === "recording") {
+        e.preventDefault();
+        this.recorder.undo();
+      }
+    });
+  }
+
+  /**
+   * Everything on the editor screen's toolbar and footer. Kept separate
+   * from bindUI() only because there's a lot of it.
+   */
+  bindEditorUI() {
+    const $ = (id) => document.getElementById(id);
+    const ed = this.editor;
+
+    $("edPlayBtn").onclick = () => ed.togglePlay();
+    ed.onTime = (t) => { $("edClock").textContent = fmtTime(t); };
+    ed.onChange = (e) => {
+      const notes = e.notes;
+      $("edCount").textContent = notes.length;
+      $("edHolds").textContent = notes.filter((n) => n.dur > 0).length;
+      const overlapN = e.overlaps().size;
+      $("edOverlapWarn").hidden = overlapN === 0;
+      $("edOverlaps").textContent = overlapN;
+      $("edPlayBtn").innerHTML = e.playing ? "&#10074;&#10074;" : "&#9654;";
+      $("edUndoBtn").disabled = e.history.length < 2;
+      $("edRedoBtn").disabled = e.future.length === 0;
+      $("edDeleteBtn").disabled = e.selected.size === 0;
+    };
+
+    $("edBpm").onchange = () => { ed.bpm = parseFloat($("edBpm").value) || 0; };
+    $("edSnap").onchange = () => { ed.snap = $("edSnap").checked; };
+    $("edDiv").onchange = () => { ed.division = parseInt($("edDiv").value, 10); };
+    $("edTick").onchange = () => { ed.tickEnabled = $("edTick").checked; };
+    $("edLanes").onchange = () => {
+      const n = parseInt($("edLanes").value, 10);
+      setLaneCount(n);
+      this.input.rebuild();
+      this.renderer.resize();
+      this.lanePress = new Array(CONFIG.laneCount).fill(0);
+      ed.setLaneCount(n);
+    };
+
+    $("edUndoBtn").onclick = () => ed.undo();
+    $("edRedoBtn").onclick = () => ed.redo();
+    $("edDeleteBtn").onclick = () => ed.deleteSelected();
+    $("edFitBtn").onclick = () => ed.fitToContent();
+
+    $("edBackBtn").onclick = () => this.closeEditor();
+    $("edDownloadBtn").onclick = () => this.exportEditorChart(true);
+    $("edUseBtn").onclick = () => {
+      if (this.exportEditorChart(false)) this.startRun();
+    };
+  }
+
+  /** Build a chart from the editor's current notes + the footer's metadata
+   *  fields, either downloading it or loading it straight into the game. */
+  exportEditorChart(download) {
+    const $ = (id) => document.getElementById(id);
+    const chart = {
+      song: {
+        title: $("edTitle").value || "Untitled",
+        artist: $("edArtist").value || "",
+        audio: this.chart?.song?.audio || "assets/audio/" + (this._audioFileName || "my-song.mp3"),
+        offset: parseFloat($("edOffset").value) || 0,
+      },
+      chart: {
+        difficulty: $("edDiff").value,
+        level: this.chart?.chart?.level || 1,
+        charter: this.chart?.chart?.charter || "",
+        lanes: CONFIG.laneCount,
+        scrollSpeed: this.chart?.chart?.scrollSpeed || 1,
+        targetScore: this.chart?.chart?.targetScore || 950000,
+        bpm: this.editor.bpm || 0,
+      },
+      notes: this.editor.getNotes(),
+    };
+    const built = serializeChart(chart);
+
+    if (download) {
+      const text = stringifyChart(built);
+      const name = (chart.song.title || "chart").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "chart";
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      return true;
+    }
+
+    const okay = this.loadChart(parseChart(built));
+    if (okay) {
+      $("chartName").textContent = (chart.song.title || "Untitled") + " — edited in piano roll";
+      $("chartName").className = "slot-value ok";
+    }
+    return okay;
+  }
+
+  /**
+   * Open the piano roll on either the currently loaded chart (so an
+   * uploaded or demo chart can be touched up) or, if none is loaded, a
+   * blank canvas. `initialNotes` overrides both — that's how a freshly
+   * recorded take gets handed off for cleanup.
+   */
+  openEditor(initialNotes) {
+    const $ = (id) => document.getElementById(id);
+    this.hideScreens();
+    document.getElementById("recHud").hidden = true;
+    if (this.state === "playing" || this.state === "paused") this.conductor.pause();
+    this.input.enabled = false;
+    this.input.releaseAll();
+    this.state = "editing";
+
+    const lanes = this.chart?.chart?.lanes || CONFIG.laneCount;
+    if (lanes !== CONFIG.laneCount) {
+      setLaneCount(lanes);
+      this.input.rebuild();
+      this.renderer.resize();
+      this.lanePress = new Array(CONFIG.laneCount).fill(0);
+    }
+    $("edLanes").value = String(lanes);
+
+    this.editor.setAudioBuffer(this.conductor.buffer);
+    this.editor.bpm = this.chart?.chart?.bpm || 0;
+    $("edBpm").value = this.editor.bpm || "";
+
+    const notes = initialNotes
+      ? initialNotes
+      : this.chart
+        ? this.chart.notes.map((n) => ({ lane: n.lane, time: n.time, dur: n.dur }))
+        : [];
+    this.editor.loadNotes(notes, lanes);
+
+    $("edTitle").value = this.chart?.song?.title || "";
+    $("edArtist").value = this.chart?.song?.artist || "";
+    $("edDiff").value = this.chart?.chart?.difficulty || "MASTER";
+    $("edOffset").value = this.chart?.song?.offset || 0;
+
+    document.getElementById("editorScreen").hidden = false;
+    this._showEditorScreen();
+  }
+
+  _showEditorScreen() {
+    requestAnimationFrame(() => { this.editor.resize(); this.editor.start(); });
+  }
+
+  closeEditor() {
+    this.editor.stop();
+    this.state = "menu";
+    document.getElementById("editorScreen").hidden = true;
+    document.getElementById("startScreen").hidden = false;
+  }
+
+  /** Shift the whole chart against the audio, mid-run. */
+  nudgeOffset(delta) {
+    if (!this.chart) return;
+    this.liveOffset += delta;
+    for (const n of this.notes) { n.time += delta; n.end += delta; }
+  }
+
+  /* =====================================================================
+   *  RUN LIFECYCLE
+   * =================================================================== */
+  reset() {
+    if (!this.chart) return;
+    this.notes = instantiate(this.chart.notes);
+    if (this.liveOffset) {
+      for (const n of this.notes) { n.time += this.liveOffset; n.end += this.liveOffset; }
+    }
+
+    this.totalJudgments = countJudgments(this.chart.notes);
+    this.pointsPer = CONFIG.MAX_SCORE / this.totalJudgments;
+    this.score = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.tally = { MARVELOUS: 0, GREAT: 0, GOOD: 0, MISS: 0 };
+    this.cursor = 0;
+    this.effects.length = 0;
+
+    /* Run to the end of the audio if there is any, so a long outro isn't
+       cut off, otherwise three seconds past the final note. */
+    const lastNote = this.notes[this.notes.length - 1].end + 3.0;
+    this.songEnd = this.conductor.buffer
+      ? Math.max(lastNote, this.conductor.duration)
+      : lastNote;
+
+    this.input.releaseAll();
+    this.paintUI();
+    this.ui.comboWrap.classList.remove("on");
+    this.ui.judgment.style.opacity = 0;
+  }
+
+  hideScreens() {
+    for (const id of ["startScreen", "pauseScreen", "resultScreen", "recordSetup", "editorScreen"]) {
+      document.getElementById(id).hidden = true;
+    }
+  }
+
+  startRun() {
+    if (!this.chart) return;
+    this.editor.stop();
+    this.hideScreens();
+    document.getElementById("recHud").hidden = true;
+    this.conductor.ensureContext();
+    this.conductor.start(0);
+    this.input.enabled = true;
+    this.state = "playing";
+  }
+
+  pause() {
+    if (this.state !== "playing") return;
+    this.state = "paused";
+    this.conductor.pause();
+    this.input.enabled = false;
+    this.input.releaseAll();
+    this._showOffset();
+    document.getElementById("pauseScreen").hidden = false;
+  }
+
+  resume() {
+    if (this.state !== "paused") return;
+    document.getElementById("pauseScreen").hidden = true;
+    this.conductor.resume();
+    this.input.enabled = true;
+    this.state = "playing";
+  }
+
+  toMenu() {
+    this.editor.stop();
+    this.conductor.stop();
+    this.input.enabled = false;
+    this.input.releaseAll();
+    this.state = "menu";
+    this.hideScreens();
+    document.getElementById("recHud").hidden = true;
+
+    /* Cancelable, so something outside this file can claim it and show a
+     * lobby instead — see js/integration.js. If nothing does, this falls
+     * back to the setup screen exactly as it always has. */
+    const notClaimed = document.dispatchEvent(new CustomEvent("game:exit", { cancelable: true }));
+    if (notClaimed) document.getElementById("startScreen").hidden = false;
+
+    this.reset();
+  }
+
+  finish() {
+    this.state = "done";
+    this.conductor.stop();
+    this.input.enabled = false;
+    const $ = (id) => document.getElementById(id);
+    $("finalScore").textContent = Math.round(this.score).toLocaleString();
+    $("tMarv").textContent = this.tally.MARVELOUS;
+    $("tGreat").textContent = this.tally.GREAT;
+    $("tGood").textContent = this.tally.GOOD;
+    $("tMiss").textContent = this.tally.MISS;
+    $("tCombo").textContent = this.maxCombo;
+    $("tAcc").textContent = ((this.score / CONFIG.MAX_SCORE) * 100).toFixed(2) + "%";
+    $("resultScreen").hidden = false;
+  }
+
+  /* =====================================================================
+   *  RECORDING
+   * =================================================================== */
+  startRecording() {
+    const $ = (id) => document.getElementById(id);
+    const lanes = parseInt($("recLanes").value, 10);
+    if (lanes !== CONFIG.laneCount) {
+      setLaneCount(lanes);
+      this.input.rebuild();
+      this.renderer.resize();
+      this.lanePress = new Array(CONFIG.laneCount).fill(0);
+    }
+    this.recorder.bpm = parseFloat($("recBpm").value) || 0;
+    this.recorder.division = parseInt($("recDiv").value, 10) || 4;
+    this.recorder.gridOffset = (parseFloat($("recGrid").value) || 0) / 1000;
+
+    this.hideScreens();
+    this.notes = [];
+    this.cursor = 0;
+    this.effects.length = 0;
+    $("recHud").hidden = false;
+    this.recorder.start();
+    this.conductor.ensureContext();
+    this.conductor.start(0);
+    this.input.enabled = true;
+    this.state = "recording";
+  }
+
+  stopRecording() {
+    if (this.state !== "recording") return;
+    this.recorder.stop();
+    this.conductor.pause();
+    this.input.enabled = false;
+    this.input.releaseAll();
+    this.hideScreens();
+    document.getElementById("recHud").hidden = true;
+    this.state = "editing";
+    this.chart = null;   // this session's notes replace whatever was loaded before
+
+    const $ = (id) => document.getElementById(id);
+    const bpm = this.recorder.bpm || guessBPM(this.recorder.notes) || 0;
+
+    this.editor.setAudioBuffer(this.conductor.buffer);
+    this.editor.bpm = bpm;
+    this.editor.division = this.recorder.division || 4;
+    this.editor.snap = !!this.recorder.bpm;
+    this.editor.loadNotes(this.recorder.notes, CONFIG.laneCount);
+
+    $("edBpm").value = bpm || "";
+    $("edDiv").value = String(this.editor.division);
+    $("edSnap").checked = this.editor.snap;
+    $("edLanes").value = String(CONFIG.laneCount);
+    $("edTitle").value = $("recTitle").value || "";
+    $("edArtist").value = $("recArtist").value || "";
+    $("edDiff").value = $("recDiff").value || "MASTER";
+    $("edOffset").value = 0;
+
+    document.getElementById("editorScreen").hidden = false;
+    this._showEditorScreen();
+  }
+
+  /* =====================================================================
+   *  DEPTH + JUDGING
+   * =================================================================== */
+  get speed() { return SPEEDS[this.speedIndex]; }
+  /** Track depth of an event that happens `dt` seconds from now. */
+  zAt(dt) { return dt * CONFIG.Z_PER_SEC * this.speed; }
+
+  judgeFor(delta) {
+    const a = Math.abs(delta);
+    if (a <= CONFIG.W_MARVELOUS) return "MARVELOUS";
+    if (a <= CONFIG.W_GREAT) return "GREAT";
+    if (a <= CONFIG.W_GOOD) return "GOOD";
+    return null;
+  }
+
+  handlePress(lane) {
+    this.lanePress[lane] = 1;
+
+    if (this.state === "recording") {
+      this.recorder.press(lane);
+      this.conductor.pluck(lane, false);
+      this.spawnBurst(lane, "MARVELOUS");
+      this.hitPulse = 1;
+      return;
+    }
+    if (this.state !== "playing") return;
+    const t = this.conductor.time;
+
+    /* nearest unresolved note in this lane inside the miss window */
+    let best = null, bestAbs = Infinity;
+    for (let i = this.cursor; i < this.notes.length; i++) {
+      const n = this.notes[i];
+      if (n.time - t > CONFIG.W_MISS) break;      // list is time-sorted
+      if (n.lane !== lane || n.state !== "pending") continue;
+      const a = Math.abs(n.time - t);
+      if (a <= CONFIG.W_MISS && a < bestAbs) { best = n; bestAbs = a; }
+    }
+    if (!best) return;                             // stray press — no penalty
+
+    const grade = this.judgeFor(best.time - t);
+    if (!grade) {                                  // inside miss window, outside GOOD
+      best.state = "missed";
+      this.applyJudgment("MISS", lane, best.type === "hold" ? 2 : 1);
+      return;
+    }
+
+    best.headJudged = true;
+    best.flash = 1;
+    this.applyJudgment(grade, lane, 1);
+    this.conductor.pluck(lane, best.type === "hold");
+    this.spawnBurst(lane, grade);
+    this.hitPulse = 1;
+
+    best.state = best.type === "hold" ? "held" : "done";
+  }
+
+  handleRelease(lane) {
+    this.lanePress[lane] = 0;
+
+    if (this.state === "recording") { this.recorder.release(lane); return; }
+    if (this.state !== "playing") return;
+    const t = this.conductor.time;
+
+    for (let i = this.cursor; i < this.notes.length; i++) {
+      const n = this.notes[i];
+      /* a held note's head is always in the past, so we can stop early */
+      if (n.time - t > 0.5) break;
+      if (n.lane !== lane || n.state !== "held") continue;
+
+      if (t >= n.end - CONFIG.W_RELEASE) {
+        /* released at or after the tail — always a clean finish */
+        const grade = this.judgeFor(Math.min(0, t - n.end)) || "GOOD";
+        n.state = "done";
+        this.applyJudgment(grade, lane, 1);
+        this.spawnBurst(lane, grade);
+        this.hitPulse = 1;
+      } else {
+        /* let go too early: the hold breaks */
+        n.state = "missed";
+        this.applyJudgment("MISS", lane, 1);
+      }
+      return;
+    }
+  }
+
+  /** count = how many judgment slots this event consumes (a dropped hold = 2). */
+  applyJudgment(grade, lane, count = 1) {
+    const j = JUDGMENTS[grade];
+    this.tally[grade] += count;
+    this.score += this.pointsPer * j.weight * count;
+
+    if (grade === "MISS") {
+      this.combo = 0;
+      this.ui.comboWrap.classList.remove("on");
+    } else {
+      this.combo += count;
+      this.maxCombo = Math.max(this.maxCombo, this.combo);
+      this.ui.comboWrap.classList.add("on");
+      this.ui.comboNum.classList.remove("beat");
+      void this.ui.comboNum.offsetWidth;
+      this.ui.comboNum.classList.add("beat");
+    }
+
+    const el = this.ui.judgment;
+    el.textContent = j.label;
+    el.style.color = j.color;
+    el.style.textShadow = `0 0 26px ${j.color}88, 0 2px 10px rgba(0,0,0,.9)`;
+    el.classList.remove("pop");
+    void el.offsetWidth;
+    el.classList.add("pop");
+
+    this.paintUI();
+  }
+
+  paintUI() {
+    const s = Math.round(this.score);
+    this.ui.scoreBig.textContent = s.toLocaleString();
+    this.ui.myScore.textContent = s.toLocaleString();
+    this.ui.maxCombo.textContent = this.maxCombo;
+    this.ui.comboNum.textContent = this.combo;
+    this.ui.goalBar.style.width = clamp((s / CONFIG.TARGET_SCORE) * 100, 0, 100) + "%";
+    this.ui.medals[0].classList.toggle("spent", s < CONFIG.TARGET_SCORE * 0.42);
+    this.ui.medals[1].classList.toggle("spent", s < CONFIG.TARGET_SCORE * 0.84);
+  }
+
+  spawnBurst(lane, grade) {
+    const r = this.renderer;
+    this.effects.push({
+      x: r.cx + r.laneCx[lane], y: r.hitY,
+      age: 0, life: 0.42, color: JUDGMENTS[grade].color, lane,
+    });
+  }
+
+  /* =====================================================================
+   *  FRAME
+   * =================================================================== */
+  update(dt) {
+    const t = this.conductor.time;
+
+    /* advance the cursor past everything that can no longer be interacted with */
+    while (this.cursor < this.notes.length) {
+      const n = this.notes[this.cursor];
+      const dead = n.state === "done" || n.state === "missed";
+      const gone = (n.type === "hold" ? n.end : n.time) + CONFIG.W_MISS < t;
+      if (dead && gone) this.cursor++; else break;
+    }
+
+    for (let i = this.cursor; i < this.notes.length; i++) {
+      const n = this.notes[i];
+      if (n.time - t > 4) break;
+
+      if (n.state === "pending" && t > n.time + CONFIG.W_MISS) {
+        n.state = "missed";
+        this.applyJudgment("MISS", n.lane, n.type === "hold" ? 2 : 1);
+      } else if (n.state === "held" && t >= n.end) {
+        /* held all the way through — free the finger, award the tail */
+        n.state = "done";
+        this.applyJudgment("MARVELOUS", n.lane, 1);
+        this.spawnBurst(n.lane, "MARVELOUS");
+        this.hitPulse = 1;
+      }
+      if (n.flash > 0) n.flash = Math.max(0, n.flash - dt * 4);
+    }
+
+    if (t > this.songEnd) this.finish();
+  }
+
+  /** Lane glow, hit pulse and burst decay — shared by playing and recording. */
+  updateCommon(dt) {
+    for (let i = 0; i < CONFIG.laneCount; i++) {
+      const target = this.input.isDown(i) ? 1 : 0;
+      this.lanePress[i] += (target - this.lanePress[i]) * Math.min(1, dt * 18);
+    }
+    this.hitPulse = Math.max(0, this.hitPulse - dt * 3.4);
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      this.effects[i].age += dt;
+      if (this.effects[i].age >= this.effects[i].life) this.effects.splice(i, 1);
+    }
+  }
+
+  updateRecording() {
+    const t = this.conductor.time;
+    document.getElementById("recClock").textContent = fmtTime(t);
+    if (this.conductor.buffer && t >= this.conductor.duration) this.stopRecording();
+  }
+
+  draw() {
+    const r = this.renderer, g = r.ctx, t = this.conductor.time;
+    r.drawBackground();
+    r.drawTrack();
+
+    for (let i = 0; i < CONFIG.laneCount; i++) r.drawLanePress(i, this.lanePress[i]);
+
+    /* Collect what's visible, then paint far → near so nearer notes
+       correctly overlap the ones behind them. */
+    const visible = [];
+    for (let i = this.cursor; i < this.notes.length; i++) {
+      const n = this.notes[i];
+      const zHead = this.zAt(n.time - t);
+      if (zHead > CONFIG.Z_CULL) break;              // sorted: the rest are further
+      const zTail = n.type === "hold" ? this.zAt(n.end - t) : zHead;
+      if (zTail < CONFIG.Z_BEHIND) continue;
+      if (n.state === "done" && n.type === "tap") continue;
+      visible.push({ n, zHead, zTail });
+    }
+
+    /* Everything from here is clipped to the board, so a note sliding past
+       the judgment line disappears cleanly under the brass instead of
+       spilling over the key caps. */
+    g.save();
+    r.trackPath(g, 0, 1.0);
+    g.clip();
+
+    for (let i = visible.length - 1; i >= 0; i--) {
+      const { n, zHead, zTail } = visible[i];
+      const dead = n.state === "missed";
+      const fade = clamp((CONFIG.Z_CULL - zHead) / (CONFIG.Z_CULL - CONFIG.Z_FADE), 0, 1);
+      const alpha = dead ? 0.45 : fade;
+
+      if (n.type === "hold") {
+        if (n.state === "done") continue;
+        const active = n.state === "held";
+        /* While held, the body is consumed at the hit line: clamp the head
+           to z = 0 so it visibly shortens into the brass. */
+        const zn = active ? Math.max(0, zHead) : zHead;
+        const zf = Math.min(zTail, CONFIG.Z_CULL);
+        if (zf > zn) r.drawHoldBody(n.lane, zn, zf, { dead, active, alpha });
+        if (!active && zHead > CONFIG.Z_BEHIND) {
+          r.drawKeyNote(n.lane, zHead, { dead, alpha, flash: n.flash, wide: 0.44 });
+        } else if (active) {
+          r.drawKeyNote(n.lane, 0, { dead: false, alpha: 1, flash: 0.55, wide: 0.44 });
+        }
+      } else {
+        r.drawKeyNote(n.lane, zHead, { dead, alpha, flash: n.flash });
+      }
+    }
+
+    g.restore();
+
+    r.drawHitLine(this.lanePress.map((v) => v > 0.5), this.hitPulse);
+
+    /* hit bursts: a ring expanding along the hit line */
+    for (const e of this.effects) {
+      const k = e.age / e.life;
+      const rad = r.laneW * (0.28 + k * 0.85);
+      g.save();
+      g.globalAlpha = (1 - k) * 0.85;
+      g.strokeStyle = e.color;
+      g.lineWidth = 3 * (1 - k) + 0.6;
+      g.beginPath();
+      g.ellipse(e.x, e.y, rad, rad * 0.30, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.globalAlpha = (1 - k) * 0.5;
+      g.fillStyle = e.color;
+      g.beginPath();
+      g.ellipse(e.x, e.y, rad * 0.55, rad * 0.16, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+  }
+
+  loop = (now) => {
+    const dt = Math.min(0.05, (now - (this._last || now)) / 1000);
+    this._last = now;
+    if (this.state === "playing") this.update(dt);
+    if (this.state === "recording") this.updateRecording();
+    if (this.state === "playing" || this.state === "recording") this.updateCommon(dt);
+    this.draw();
+    requestAnimationFrame(this.loop);
+  };
+}
+
+function fmtTime(s) {
+  if (!Number.isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  return m + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+}
+
+
+/* ===== boot ==================================================== */
+const game = new Game();
+window.game = game;
+
+})();
+</script></body>
+</html>

@@ -1,0 +1,57 @@
+  {
+    "id": "bach",
+    "name": "Johann Sebastian Bach",
+    "lifespan": "1685 - 1750",
+    "era": "Baroque",
+    "origin": "Eisenach, Germany",
+    "portraitUrl": "assets/portraits/George_Frideric_Handel.jpg",
+    "biography": "Bach spent most of his working life as a church organist and choirmaster in provincial German towns, ending his career at Leipzig's St. Thomas Church, where he supplied a new cantata almost every week for years on end. He was better known in his own lifetime as a virtuoso organist than as a composer, and much of his output was written simply to meet the demands of his job rather than for personal glory. His music is built on counterpoint — several independent melodic lines woven together so precisely that they lock like joinery — and works such as The Well-Tempered Clavier and the Goldberg Variations are still used to teach that discipline today. Bach's reputation as one of history's greatest composers was largely posthumous, rebuilt in the 19th century after decades in which his scores were dismissed as old-fashioned.",
+    "songs": [
+      { "id": "bach-minuet-g", "title": "Minuet in G Major", "difficulty": "EASY", "myScore": 812340, "audioUrl": "assets/audio/bach-minuet-g.mp3", "chartUrl": "charts/bach-minuet-g.json" },
+      { "id": "bach-prelude-c", "title": "Prelude in C Major", "difficulty": "NORMAL", "myScore": 0, "audioUrl": "assets/audio/bach-prelude-c.mp3", "chartUrl": "charts/bach-prelude-c.json" },
+      { "id": "bach-toccata-fugue", "title": "Toccata and Fugue in D Minor", "difficulty": "MASTER", "myScore": 0, "audioUrl": "assets/audio/bach-toccata-fugue.mp3", "chartUrl": "charts/bach-toccata-fugue.json" }
+    ]
+  },
+  {
+    "id": "mozart",
+    "name": "Wolfgang Amadeus Mozart",
+    "lifespan": "1756 - 1791",
+    "era": "Classical",
+    "origin": "Salzburg, Austria",
+    "portraitUrl": "assets/portraits/mozart.svg",
+    "biography": "Mozart was performing for European royalty before he was six, touted by his father Leopold as a child prodigy on both harpsichord and violin. That early fame gave way to a difficult adult career: he left a secure court post in Salzburg to freelance in Vienna, where his income rose and fell with the popularity of his operas and subscription concerts. In barely thirty-five years he produced over six hundred works, moving easily between comic opera, symphony, and chamber music, and he wrote with famous speed, often composing a piece almost fully formed in his head before setting it on paper. He died in Vienna in 1791, officially of a fever, and was buried in a common grave in accordance with the modest funeral customs of the time — not the pauper's burial popular legend later made of it.",
+    "songs": [
+      { "id": "mozart-turkish-march", "title": "Rondo alla Turca", "difficulty": "HARD", "myScore": 645200, "audioUrl": "assets/audio/mozart-turkish-march.mp3", "chartUrl": "charts/mozart-turkish-march.json" },
+      { "id": "mozart-eine-kleine", "title": "Eine Kleine Nachtmusik", "difficulty": "NORMAL", "myScore": 0, "audioUrl": "assets/audio/mozart-eine-kleine.mp3", "chartUrl": "charts/mozart-eine-kleine.json" },
+      { "id": "mozart-lacrimosa", "title": "Lacrimosa", "difficulty": "MASTER", "myScore": 0, "audioUrl": "assets/audio/mozart-lacrimosa.mp3", "chartUrl": "charts/mozart-lacrimosa.json" }
+    ]
+  },
+  {
+    "id": "beethoven",
+    "name": "Ludwig van Beethoven",
+    "lifespan": "1770 - 1827",
+    "era": "Classical / Romantic",
+    "origin": "Bonn, Germany",
+    "portraitUrl": "assets/portraits/beethoven.svg",
+    "biography": "Beethoven arrived in Vienna in his early twenties as a formidable piano virtuoso and a student of Haydn, quickly building a reputation for improvisations that could reduce a room to silence. In his late twenties his hearing began to fail, a slow and by his own account devastating decline he mostly hid from the public, confiding his despair only in a private letter he never sent. He kept composing and performing for another two decades, and some of his most ambitious works — the late piano sonatas, the Ninth Symphony — were written after he could no longer hear them played. His music sits at the hinge between the balanced Classical style he inherited and the more personal, turbulent Romantic style that followed, and he is generally credited with widening what a symphony or a sonata was allowed to express.",
+    "songs": [
+      { "id": "beethoven-fur-elise", "title": "Für Elise", "difficulty": "EASY", "myScore": 921050, "audioUrl": "assets/audio/beethoven-fur-elise.mp3", "chartUrl": "charts/beethoven-fur-elise.json" },
+      { "id": "beethoven-moonlight", "title": "Moonlight Sonata, 1st Movement", "difficulty": "NORMAL", "myScore": 578430, "audioUrl": "assets/audio/beethoven-moonlight.mp3", "chartUrl": "charts/beethoven-moonlight.json" },
+      { "id": "beethoven-ode-to-joy", "title": "Ode to Joy", "difficulty": "EASY", "myScore": 0, "audioUrl": "assets/audio/beethoven-ode-to-joy.mp3", "chartUrl": "charts/beethoven-ode-to-joy.json" },
+      { "id": "beethoven-pathetique", "title": "Pathétique Sonata, 3rd Movement", "difficulty": "MASTER", "myScore": 0, "audioUrl": "assets/audio/beethoven-pathetique.mp3", "chartUrl": "charts/beethoven-pathetique.json" }
+    ]
+  },
+  {
+    "id": "chopin",
+    "name": "Frédéric Chopin",
+    "lifespan": "1810 - 1849",
+    "era": "Romantic",
+    "origin": "Żelazowa Wola, Poland",
+    "portraitUrl": "assets/portraits/chopin.svg",
+    "biography": "Chopin left Poland at twenty and never returned, settling in Paris as the political unrest of the time made the trip home increasingly impossible. He earned his living mostly by teaching piano to the city's wealthy families, since he disliked the large public concerts most virtuosos depended on and gave only a handful of paid performances in his lifetime, preferring the intimacy of a private salon. Almost everything he wrote was for solo piano, and he treated the instrument with a harmonic subtlety and a rhythmic freedom — the flexible push and pull known as rubato — that few of his contemporaries attempted. He suffered from poor health for most of his adult life and died in Paris at thirty-nine, reportedly asking for his heart to be removed and returned to Poland, where it remains sealed inside a church pillar in Warsaw.",
+    "songs": [
+      { "id": "chopin-nocturne-op9-2", "title": "Nocturne in E-flat Major, Op. 9 No. 2", "difficulty": "NORMAL", "myScore": 733910, "audioUrl": "assets/audio/chopin-nocturne-op9-2.mp3", "chartUrl": "charts/chopin-nocturne-op9-2.json" },
+      { "id": "chopin-minute-waltz", "title": "Minute Waltz, Op. 64 No. 1", "difficulty": "HARD", "myScore": 0, "audioUrl": "assets/audio/chopin-minute-waltz.mp3", "chartUrl": "charts/chopin-minute-waltz.json" },
+      { "id": "chopin-revolutionary", "title": "Revolutionary Étude, Op. 10 No. 12", "difficulty": "MASTER", "myScore": 0, "audioUrl": "assets/audio/chopin-revolutionary.mp3", "chartUrl": "charts/chopin-revolutionary.json" }
+    ]
+  },

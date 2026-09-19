@@ -1,0 +1,687 @@
+/* ============================================================================
+   PIANO CLASSICS — LOBBY STYLESHEET
+   ----------------------------------------------------------------------------
+   Design language: a concert programme, not a dashboard. Composer cards are
+   staged like cabinet-card portraits resting on a lit shelf; every detail
+   screen splits into a "book gutter" of portrait-and-vitals beside content,
+   as if you'd turned to that composer's page in the programme. One bold
+   moment is spent on the Play button; everything else stays quiet.
+
+   TOKENS
+     Color   — --stage, --walnut, --walnut-light, --parchment, --gold,
+               --gold-bright, --burgundy (named, not decorative-only: gold
+               marks interactive/selected, burgundy marks the top difficulty)
+     Type    — Playfair Display (titles, names, song titles — the voice of
+               the page); Cormorant Garamond (biography — the reading face,
+               already used by the gameplay screens); Inter (buttons, tags,
+               nav — the interface's own voice, kept distinct from both)
+     Layout  — Screen 1 is left-aligned, not centered-hero: a programme
+               cover, not a landing page. Screens 2–4 share one two-column
+               "open book" grid with a hairline gutter.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --stage:         #0a0705;
+  --walnut:        #241609;
+  --walnut-light:  #3c2712;
+  --walnut-lift:   #56381b;
+  --parchment:     #f1e8d3;
+  --parchment-dim: #cbbe9e;
+  --gold:          #c8a24d;
+  --gold-bright:   #f2d98a;
+  --gold-dim:      rgba(200,162,77,.32);
+  --burgundy:      #7a2632;
+  --burgundy-lit:  #b0475a;
+  --shadow:        rgba(0,0,0,.55);
+
+  --serif-display: "Playfair Display", "Iowan Old Style", Georgia, serif;
+  --serif-read:    "Cormorant Garamond", Georgia, serif;
+  --sans:          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  color-scheme: dark;
+}
+
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+body{
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--parchment);
+  background: var(--stage);
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button{ font-family: inherit; color: inherit; }
+::selection{ background: var(--gold-dim); }
+
+/* ============================================================================
+   ROOT STAGE
+   ---------------------------------------------------------------------------
+   #lobby-root is the thing you hide (or remove) once real gameplay starts.
+   It owns the full viewport and paints its own backdrop, so it can sit on
+   top of a game canvas underneath without that canvas showing through.
+   ========================================================================== */
+#lobby-root{
+  position: fixed; inset: 0;
+  z-index: 40;
+  background:
+    radial-gradient(140% 90% at 18% -10%, rgba(120,80,30,.18), transparent 55%),
+    radial-gradient(120% 100% at 100% 110%, rgba(80,40,20,.22), transparent 60%),
+    linear-gradient(180deg, #150d06 0%, var(--stage) 45%, #060402 100%);
+  transition: opacity .5s ease, visibility .5s;
+}
+#lobby-root.is-hidden{
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* A descendant's own explicit pointer-events/visibility (set below for
+   .is-active) would otherwise win over this container's, since neither
+   property "blocks" a more specific rule the way display:none would. */
+#lobby-root.is-hidden .lobby-screen{
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* a faint standing wood-grain, so the stage isn't a flat gradient */
+#lobby-root::before{
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: .5;
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgba(255,255,255,.012) 0px, rgba(255,255,255,.012) 1px,
+    transparent 1px, transparent 3px
+  );
+}
+
+/* ============================================================================
+   SCREEN STACK + TRANSITIONS
+   ---------------------------------------------------------------------------
+   All four screens live in the DOM at once, absolutely stacked. Only
+   .is-active is interactive; the outgoing/incoming pair cross-fades with a
+   short directional drift so "forward" reads as advancing and "back" reads
+   as returning, without resorting to a slide-everything carousel.
+   ========================================================================== */
+.lobby-screen{
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: clamp(20px, 4vw, 56px) clamp(20px, 5vw, 72px);
+  overflow-y: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(0);
+  transition: opacity .38s cubic-bezier(.22,.9,.32,1), transform .38s cubic-bezier(.22,.9,.32,1), visibility .38s;
+}
+.lobby-screen.is-active{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.lobby-screen.enter-forward{ transform: translateX(28px); }
+.lobby-screen.enter-back{ transform: translateX(-28px); }
+.lobby-screen.is-active.enter-forward,
+.lobby-screen.is-active.enter-back{ transform: translateX(0); }
+
+@media (prefers-reduced-motion: reduce){
+  .lobby-screen, #lobby-root{ transition: opacity .15s linear !important; transform: none !important; }
+}
+
+/* ============================================================================
+   SHARED CHROME — back button, info button, panel divider
+   ========================================================================== */
+.lobby-topbar{
+  display: flex; align-items: center; gap: 14px;
+  flex: 0 0 auto;
+  margin-bottom: clamp(14px, 3vh, 28px);
+  min-height: 40px;
+}
+
+.icon-btn{
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  height: 40px; padding: 0 16px 0 12px;
+  background: rgba(20,13,7,.55);
+  border: 1px solid var(--gold-dim);
+  border-radius: 999px;
+  color: var(--parchment);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .12s ease;
+}
+.icon-btn svg{ width: 16px; height: 16px; flex: 0 0 auto; }
+.icon-btn:hover{ border-color: var(--gold); background: rgba(35,23,12,.7); }
+.icon-btn:active{ transform: scale(.96); }
+.icon-btn:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+.icon-btn.round{ width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+.icon-btn.small{ height: 32px; width: 32px; padding: 0; border-radius: 50%; font-size: 15px; font-weight: 700; }
+
+/* ============================================================================
+   SCREEN 1 — MAIN MENU (composer shelf)
+   ========================================================================== */
+#screen1{ justify-content: center; }
+
+.menu-header{
+  flex: 0 0 auto;
+  margin-bottom: clamp(20px, 4vh, 40px);
+}
+.menu-header .kicker{
+  font-family: var(--serif-read);
+  font-style: italic;
+  font-size: clamp(15px, 1.6vw, 18px);
+  color: var(--gold);
+  margin: 0 0 6px;
+}
+.menu-header h1{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(34px, 6vw, 60px);
+  line-height: 1.05;
+  margin: 0;
+  color: var(--parchment);
+  letter-spacing: .01em;
+}
+
+.composer-shelf-wrap{
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+.composer-shelf{
+  display: flex;
+  gap: clamp(18px, 2.6vw, 34px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  padding: 10px clamp(4px, 2vw, 14px) 34px;
+  margin: 0 -4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.composer-shelf::-webkit-scrollbar{ display: none; }
+
+/* edge fade so the row visibly continues off-screen */
+.composer-shelf-wrap{
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+}
+
+.composer-shelf > li{
+  list-style: none;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  width: clamp(140px, 17vw, 196px);
+  opacity: 0;
+  transform: translateY(14px);
+  animation: cardRise .5s cubic-bezier(.22,.9,.32,1) forwards;
+  animation-delay: var(--stagger, 0ms);
+}
+@keyframes cardRise{ to{ opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce){
+  .composer-shelf > li{ animation: none; opacity: 1; transform: none; }
+}
+
+.composer-card{
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-frame{
+  display: block;
+  position: relative;
+  border-radius: 3px;
+  padding: 7px;
+  background: linear-gradient(155deg, var(--walnut-light), var(--walnut) 60%);
+  border: 1px solid rgba(0,0,0,.4);
+  box-shadow: 0 10px 22px rgba(0,0,0,.45);
+  transition: transform .22s cubic-bezier(.22,.9,.32,1), box-shadow .22s ease, border-color .22s ease;
+}
+.card-portrait{
+  display: block;
+  width: 100%;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border-radius: 1px;
+  background: var(--walnut);
+}
+.card-plate{
+  display: block;
+  margin-top: 9px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--gold-dim);
+  text-align: center;
+}
+.card-plate .name{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(14px, 1.3vw, 16px);
+  color: var(--parchment);
+  line-height: 1.25;
+}
+.card-plate .era{
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--gold);
+  font-family: var(--sans);
+}
+
+.composer-card:hover .card-frame,
+.composer-card:focus-visible .card-frame{
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  box-shadow: 0 18px 34px rgba(0,0,0,.55), 0 0 0 1px var(--gold-dim);
+}
+.composer-card:focus-visible{ outline: none; }
+.composer-card:focus-visible .card-frame{ outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+.composer-card:active .card-frame{ transform: translateY(-2px); }
+
+/* the shelf ledge the cards appear to rest on */
+.shelf-ledge{
+  flex: 0 0 auto;
+  height: 2px;
+  margin-top: -30px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim) 12%, var(--gold-dim) 88%, transparent);
+}
+
+.shelf-nav{ display: none; }
+@media (hover: hover) and (pointer: fine){
+  .shelf-nav{
+    display: flex;
+    position: absolute; top: 50%; transform: translateY(-50%);
+    z-index: 2;
+  }
+  .shelf-nav.prev{ left: -6px; }
+  .shelf-nav.next{ right: -6px; }
+}
+
+/* ============================================================================
+   SCREENS 2–4 — the "open book" layout
+   ========================================================================== */
+.detail-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) 1px 1fr;
+  gap: clamp(20px, 3vw, 48px);
+  align-items: stretch;
+}
+
+.book-gutter{
+  background: linear-gradient(180deg, transparent, var(--gold-dim) 15%, var(--gold-dim) 85%, transparent);
+}
+
+.composer-panel{
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.composer-panel .panel-portrait{
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--gold-dim);
+  box-shadow: 0 14px 30px rgba(0,0,0,.5);
+  background: var(--walnut);
+}
+.composer-panel .panel-name{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(20px, 2.2vw, 27px);
+  margin: 18px 0 4px;
+  line-height: 1.2;
+}
+.composer-panel .panel-lifespan{
+  font-size: 14px;
+  color: var(--parchment-dim);
+  margin: 0 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+.era-pill{
+  display: inline-flex; align-items: center;
+  font-size: 11.5px; font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--gold-bright);
+  background: rgba(200,162,77,.14);
+  border: 1px solid var(--gold-dim);
+  border-radius: 999px;
+  padding: 4px 12px;
+  width: fit-content;
+}
+.info-row{
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.info-row .icon-btn.small{ border-color: var(--gold-dim); }
+.info-row span{ font-size: 13px; color: var(--parchment-dim); }
+
+/* ---- screen 2: song list ---- */
+.song-panel{ min-height: 0; display: flex; flex-direction: column; }
+.song-panel h2{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(20px, 2.4vw, 28px);
+  margin: 0 0 16px;
+  flex: 0 0 auto;
+}
+.song-list{
+  list-style: none; margin: 0; padding: 2px 6px 24px 2px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.song-list > li{ list-style: none; margin: 0; padding: 0; }
+
+.song-row{
+  display: flex; align-items: center; gap: 16px;
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(30,19,10,.55);
+  border: 1px solid rgba(200,162,77,.16);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .16s ease, background .16s ease, transform .12s ease;
+}
+.song-row:hover{ border-color: var(--gold-dim); background: rgba(45,29,15,.7); }
+.song-row:active{ transform: scale(.995); }
+.song-row:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+.song-title{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(15px, 1.6vw, 18px);
+  color: var(--parchment);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.song-score{
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  color: var(--parchment-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 96px;
+  text-align: right;
+}
+.song-score.has-score{ color: var(--gold-bright); }
+
+.difficulty-badge{
+  flex: 0 0 auto;
+  font-size: 11px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.difficulty-badge.easy{  color: #b9d9a0; background: rgba(120,170,90,.16); border-color: rgba(120,170,90,.35); }
+.difficulty-badge.normal{ color: #a9c6e6; background: rgba(90,130,180,.16); border-color: rgba(90,130,180,.35); }
+.difficulty-badge.hard{  color: #e3ab7a; background: rgba(190,120,60,.18); border-color: rgba(190,120,60,.4); }
+.difficulty-badge.master{ color: var(--burgundy-lit); background: rgba(122,38,50,.22); border-color: rgba(176,71,90,.5); }
+
+.chevron{ flex: 0 0 auto; color: var(--gold); opacity: .7; width: 16px; height: 16px; }
+
+.song-list-empty{
+  color: var(--parchment-dim);
+  font-style: italic;
+  font-family: var(--serif-read);
+  padding: 20px 4px;
+}
+
+/* ---- screen 3: biography ---- */
+.bio-panel{ min-height: 0; display: flex; flex-direction: column; }
+/* ---- screen 3: a bigger, framed portrait stands alone on the left,
+   like the plate page of a printed programme — vitals move in with the
+   biography on the right, per the brief. ---- */
+.portrait-feature{
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: clamp(0px, 1vh, 8px);
+  min-height: 0;
+}
+.portrait-feature .frame-inner{
+  position: relative;
+  width: 100%; max-width: 280px;
+}
+.portrait-feature img{
+  display: block; width: 100%;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border: 1px solid var(--gold-dim);
+  box-shadow: 0 20px 40px rgba(0,0,0,.55);
+}
+.portrait-feature .frame-inner::before{
+  content: "";
+  position: absolute; inset: -10px;
+  border: 1px solid var(--gold-dim);
+  pointer-events: none;
+}
+
+.bio-panel h2{
+  font-family: var(--serif-display); font-weight: 600;
+  font-size: clamp(22px, 2.6vw, 30px);
+  margin: 0 0 4px;
+}
+.bio-vitals{
+  display: flex; flex-wrap: wrap; gap: 20px 28px;
+  margin-bottom: 22px;
+  flex: 0 0 auto;
+}
+.vital{ display: flex; flex-direction: column; gap: 2px; }
+.vital .label{
+  font-size: 11px; letter-spacing: .02em;
+  color: var(--gold);
+}
+.vital .value{
+  font-size: 14.5px; color: var(--parchment);
+  font-variant-numeric: tabular-nums;
+}
+
+.bio-text{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 12px;
+  font-family: var(--serif-read);
+  font-size: clamp(17px, 1.5vw, 19px);
+  line-height: 1.62;
+  color: var(--parchment);
+  max-width: 68ch;
+}
+.bio-text::first-letter{
+  font-family: var(--serif-display);
+  font-size: 3.4em;
+  font-weight: 700;
+  float: left;
+  line-height: .82;
+  padding: .04em .07em 0 0;
+  color: var(--gold-bright);
+}
+
+/* ---- screen 4: pre-play ---- */
+.preplay-panel{
+  min-height: 0;
+  display: flex; flex-direction: column;
+  justify-content: center;
+  max-width: 560px;
+}
+.preplay-panel .eyebrow{
+  font-family: var(--serif-read); font-style: italic;
+  color: var(--gold); font-size: 15px; margin: 0 0 8px;
+}
+.preplay-panel h2{
+  font-family: var(--serif-display); font-weight: 700;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.12;
+  margin: 0 0 18px;
+}
+.preplay-meta{
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 30px;
+}
+.score-card{
+  display: flex; flex-direction: column; gap: 2px;
+}
+.score-card .label{ font-size: 12px; color: var(--parchment-dim); }
+.score-card .value{
+  font-family: var(--serif-display); font-weight: 600;
+  font-size: 22px; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.score-card .value.is-empty{ color: var(--parchment-dim); font-style: italic; font-family: var(--serif-read); font-weight: 400; }
+
+.play-btn{
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 14px;
+  padding: 18px 34px 18px 30px;
+  border: 1px solid var(--gold-bright);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #e7c876, var(--gold) 55%, #a9822f);
+  color: #2a1a08;
+  font-family: var(--serif-display);
+  font-weight: 700;
+  font-size: clamp(18px, 2vw, 22px);
+  letter-spacing: .01em;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 4px 0 #7a5c22, 0 18px 34px rgba(0,0,0,.5);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.play-btn::after{
+  content: "";
+  position: absolute; left: 10%; right: 10%; bottom: -22px; height: 26px;
+  background: radial-gradient(50% 100% at 50% 0%, rgba(242,217,138,.4), transparent 75%);
+  pointer-events: none;
+}
+.play-btn svg{ width: 20px; height: 20px; }
+.play-btn:hover{ transform: translateY(-2px); box-shadow: 0 6px 0 #7a5c22, 0 22px 40px rgba(0,0,0,.55); }
+.play-btn:active{ transform: translateY(2px); box-shadow: 0 2px 0 #7a5c22, 0 10px 20px rgba(0,0,0,.4); }
+.play-btn:focus-visible{ outline: 2px solid var(--parchment); outline-offset: 4px; }
+
+/* ============================================================================
+   LOADING / ERROR STATES
+   ========================================================================== */
+.lobby-loading, .lobby-error{
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 24px;
+  transition: opacity .35s ease;
+}
+.lobby-loading[hidden], .lobby-error[hidden]{ display: none; }
+
+.note-spinner{
+  width: 34px; height: 34px;
+  border: 2px solid var(--gold-dim);
+  border-top-color: var(--gold-bright);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){ .note-spinner{ animation-duration: 2.4s; } }
+
+.lobby-loading p, .lobby-error p{
+  font-family: var(--serif-read); font-style: italic;
+  color: var(--parchment-dim); font-size: 16px; max-width: 40ch;
+}
+.lobby-error h2{
+  font-family: var(--serif-display); font-weight: 600; font-size: 22px; margin: 0;
+  color: var(--parchment);
+}
+.lobby-error .icon-btn{ margin-top: 6px; }
+
+.lobby-footer-link{
+  position: absolute;
+  right: clamp(20px, 5vw, 72px);
+  bottom: clamp(14px, 2.5vh, 22px);
+  z-index: 2;
+  font-size: 12.5px;
+  color: var(--parchment-dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color .16s ease, border-color .16s ease;
+}
+.lobby-footer-link:hover, .lobby-footer-link:focus-visible{
+  color: var(--gold-bright);
+  border-color: var(--gold-dim);
+}
+.lobby-footer-link:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+@media (max-width: 480px){
+  .lobby-footer-link{ right: 16px; bottom: 10px; font-size: 11.5px; }
+}
+
+/* ============================================================================
+   MOCK GAMEPLAY HANDOFF (demo-only — see js/lobby/app.js)
+   ========================================================================== */
+.mock-gameplay{
+  position: fixed; inset: 0; z-index: 30;
+  background: radial-gradient(120% 90% at 50% 20%, #241609, var(--stage) 70%);
+  display: flex; align-items: center; justify-content: center;
+}
+.mock-gameplay[hidden]{ display: none; }
+.mock-gameplay-inner{ text-align: center; max-width: 480px; padding: 24px; }
+.mock-kicker{
+  font-family: var(--sans); font-size: 12px; letter-spacing: .08em;
+  color: var(--gold); text-transform: uppercase; margin: 0 0 10px;
+}
+.mock-gameplay-inner h2{
+  font-family: var(--serif-display); font-size: clamp(26px, 4vw, 38px); margin: 0 0 6px;
+}
+.mock-gameplay-inner .mock-composer{ color: var(--parchment-dim); margin: 0 0 26px; }
+.mock-hint{
+  margin-top: 22px; font-size: 12.5px; color: var(--parchment-dim);
+  font-family: var(--sans); line-height: 1.6;
+}
+.mock-hint code{
+  background: rgba(200,162,77,.14); padding: 1px 6px; border-radius: 3px; color: var(--gold-bright);
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 760px){
+  .detail-body{
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1px 1fr;
+    gap: 18px;
+  }
+  .book-gutter{ height: 1px; background: linear-gradient(90deg, transparent, var(--gold-dim) 15%, var(--gold-dim) 85%, transparent); }
+  .composer-panel{ flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .composer-panel .panel-portrait{ width: 84px; max-width: 84px; flex: 0 0 auto; }
+  .composer-panel .panel-name{ margin: 0; font-size: 18px; flex: 1 1 auto; min-width: 0; }
+  .composer-panel .panel-lifespan{ margin: 0; flex-basis: 100%; }
+  .info-row{ margin-top: 0; padding-top: 0; }
+  .portrait-feature .frame-inner{ max-width: 132px; }
+  .bio-vitals{ gap: 12px 22px; }
+
+  .preplay-panel{ max-width: none; justify-content: flex-start; }
+  .play-btn{ align-self: stretch; justify-content: center; }
+}
+
+@media (max-width: 600px){
+  #screen1{ justify-content: flex-start; padding-top: clamp(28px, 8vh, 64px); }
+}
+
+@media (max-width: 480px){
+  .lobby-screen{ padding: 16px 16px clamp(16px, 5vh, 28px); }
+  .menu-header{ margin-bottom: 20px; }
+  .card-plate .era{ display: none; }
+  .song-score{ min-width: 0; }
+  .song-row{ flex-wrap: wrap; gap: 8px 14px; }
+  .song-title{ flex-basis: 100%; white-space: normal; }
+}

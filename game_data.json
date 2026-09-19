@@ -1,0 +1,14 @@
+[
+  {
+    "id": "handel",
+    "name": "George Frideric Handel",
+    "lifespan": "1685 - 1759",
+    "era": "Baroque",
+    "origin": "Halle, Germany",
+    "portraitUrl": "assets/portraits/George_Frideric_Handel.jpg",
+    "biography": "Handel trained in Germany and Italy before settling permanently in London, where he became the city's leading composer of Italian opera and, later, English oratorio. He worked as much as an impresario as a composer — renting theatres, hiring singers, and managing the business risk of an opera company himself — and weathered several financial collapses along the way, including one severe enough that a stroke was blamed on the strain. Water Music, written for a royal river procession on the Thames in 1717, and the oratorio Messiah, composed in just over three weeks in 1741, remain his best-known works today. He became a British subject in 1727 and, going blind in his final years, continued to perform organ concertos from memory almost until his death in London, where he was given a state funeral in Westminster Abbey.",
+    "songs": [
+      { "id": "handel-alla-hornpipe", "title": "Water Music Suite No. 2: Alla Hornpipe", "difficulty": "MASTER", "myScore": 1000000, "audioUrl": "assets/audio/alla-hornpipe.mp3", "chartUrl": "charts/demo-alla-hornpipe.json" }
+    ]
+  }
+]

@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Piano Classics — Lobby (standalone)</title>
+<style>
+/* ============================================================================
+   PIANO CLASSICS — LOBBY STYLESHEET
+   ----------------------------------------------------------------------------
+   Design language: a concert programme, not a dashboard. Composer cards are
+   staged like cabinet-card portraits resting on a lit shelf; every detail
+   screen splits into a "book gutter" of portrait-and-vitals beside content,
+   as if you'd turned to that composer's page in the programme. One bold
+   moment is spent on the Play button; everything else stays quiet.
+
+   TOKENS
+     Color   — --stage, --walnut, --walnut-light, --parchment, --gold,
+               --gold-bright, --burgundy (named, not decorative-only: gold
+               marks interactive/selected, burgundy marks the top difficulty)
+     Type    — Playfair Display (titles, names, song titles — the voice of
+               the page); Cormorant Garamond (biography — the reading face,
+               already used by the gameplay screens); Inter (buttons, tags,
+               nav — the interface's own voice, kept distinct from both)
+     Layout  — Screen 1 is left-aligned, not centered-hero: a programme
+               cover, not a landing page. Screens 2–4 share one two-column
+               "open book" grid with a hairline gutter.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --stage:         #0a0705;
+  --walnut:        #241609;
+  --walnut-light:  #3c2712;
+  --walnut-lift:   #56381b;
+  --parchment:     #f1e8d3;
+  --parchment-dim: #cbbe9e;
+  --gold:          #c8a24d;
+  --gold-bright:   #f2d98a;
+  --gold-dim:      rgba(200,162,77,.32);
+  --burgundy:      #7a2632;
+  --burgundy-lit:  #b0475a;
+  --shadow:        rgba(0,0,0,.55);
+
+  --serif-display: "Playfair Display", "Iowan Old Style", Georgia, serif;
+  --serif-read:    "Cormorant Garamond", Georgia, serif;
+  --sans:          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  color-scheme: dark;
+}
+
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+body{
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--parchment);
+  background: var(--stage);
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button{ font-family: inherit; color: inherit; }
+::selection{ background: var(--gold-dim); }
+
+/* ============================================================================
+   ROOT STAGE
+   ---------------------------------------------------------------------------
+   #lobby-root is the thing you hide (or remove) once real gameplay starts.
+   It owns the full viewport and paints its own backdrop, so it can sit on
+   top of a game canvas underneath without that canvas showing through.
+   ========================================================================== */
+#lobby-root{
+  position: fixed; inset: 0;
+  z-index: 40;
+  background:
+    radial-gradient(140% 90% at 18% -10%, rgba(120,80,30,.18), transparent 55%),
+    radial-gradient(120% 100% at 100% 110%, rgba(80,40,20,.22), transparent 60%),
+    linear-gradient(180deg, #150d06 0%, var(--stage) 45%, #060402 100%);
+  transition: opacity .5s ease, visibility .5s;
+}
+#lobby-root.is-hidden{
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* A descendant's own explicit pointer-events/visibility (set below for
+   .is-active) would otherwise win over this container's, since neither
+   property "blocks" a more specific rule the way display:none would. */
+#lobby-root.is-hidden .lobby-screen{
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* a faint standing wood-grain, so the stage isn't a flat gradient */
+#lobby-root::before{
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: .5;
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgba(255,255,255,.012) 0px, rgba(255,255,255,.012) 1px,
+    transparent 1px, transparent 3px
+  );
+}
+
+/* ============================================================================
+   SCREEN STACK + TRANSITIONS
+   ---------------------------------------------------------------------------
+   All four screens live in the DOM at once, absolutely stacked. Only
+   .is-active is interactive; the outgoing/incoming pair cross-fades with a
+   short directional drift so "forward" reads as advancing and "back" reads
+   as returning, without resorting to a slide-everything carousel.
+   ========================================================================== */
+.lobby-screen{
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: clamp(20px, 4vw, 56px) clamp(20px, 5vw, 72px);
+  overflow-y: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(0);
+  transition: opacity .38s cubic-bezier(.22,.9,.32,1), transform .38s cubic-bezier(.22,.9,.32,1), visibility .38s;
+}
+.lobby-screen.is-active{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.lobby-screen.enter-forward{ transform: translateX(28px); }
+.lobby-screen.enter-back{ transform: translateX(-28px); }
+.lobby-screen.is-active.enter-forward,
+.lobby-screen.is-active.enter-back{ transform: translateX(0); }
+
+@media (prefers-reduced-motion: reduce){
+  .lobby-screen, #lobby-root{ transition: opacity .15s linear !important; transform: none !important; }
+}
+
+/* ============================================================================
+   SHARED CHROME — back button, info button, panel divider
+   ========================================================================== */
+.lobby-topbar{
+  display: flex; align-items: center; gap: 14px;
+  flex: 0 0 auto;
+  margin-bottom: clamp(14px, 3vh, 28px);
+  min-height: 40px;
+}
+
+.icon-btn{
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  height: 40px; padding: 0 16px 0 12px;
+  background: rgba(20,13,7,.55);
+  border: 1px solid var(--gold-dim);
+  border-radius: 999px;
+  color: var(--parchment);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .12s ease;
+}
+.icon-btn svg{ width: 16px; height: 16px; flex: 0 0 auto; }
+.icon-btn:hover{ border-color: var(--gold); background: rgba(35,23,12,.7); }
+.icon-btn:active{ transform: scale(.96); }
+.icon-btn:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+.icon-btn.round{ width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+.icon-btn.small{ height: 32px; width: 32px; padding: 0; border-radius: 50%; font-size: 15px; font-weight: 700; }
+
+/* ============================================================================
+   SCREEN 1 — MAIN MENU (composer shelf)
+   ========================================================================== */
+#screen1{ justify-content: center; }
+
+.menu-header{
+  flex: 0 0 auto;
+  margin-bottom: clamp(20px, 4vh, 40px);
+}
+.menu-header .kicker{
+  font-family: var(--serif-read);
+  font-style: italic;
+  font-size: clamp(15px, 1.6vw, 18px);
+  color: var(--gold);
+  margin: 0 0 6px;
+}
+.menu-header h1{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(34px, 6vw, 60px);
+  line-height: 1.05;
+  margin: 0;
+  color: var(--parchment);
+  letter-spacing: .01em;
+}
+
+.composer-shelf-wrap{
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+.composer-shelf{
+  display: flex;
+  gap: clamp(18px, 2.6vw, 34px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  padding: 10px clamp(4px, 2vw, 14px) 34px;
+  margin: 0 -4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.composer-shelf::-webkit-scrollbar{ display: none; }
+
+/* edge fade so the row visibly continues off-screen */
+.composer-shelf-wrap{
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+}
+
+.composer-shelf > li{
+  list-style: none;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  width: clamp(140px, 17vw, 196px);
+  opacity: 0;
+  transform: translateY(14px);
+  animation: cardRise .5s cubic-bezier(.22,.9,.32,1) forwards;
+  animation-delay: var(--stagger, 0ms);
+}
+@keyframes cardRise{ to{ opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce){
+  .composer-shelf > li{ animation: none; opacity: 1; transform: none; }
+}
+
+.composer-card{
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-frame{
+  display: block;
+  position: relative;
+  border-radius: 3px;
+  padding: 7px;
+  background: linear-gradient(155deg, var(--walnut-light), var(--walnut) 60%);
+  border: 1px solid rgba(0,0,0,.4);
+  box-shadow: 0 10px 22px rgba(0,0,0,.45);
+  transition: transform .22s cubic-bezier(.22,.9,.32,1), box-shadow .22s ease, border-color .22s ease;
+}
+.card-portrait{
+  display: block;
+  width: 100%;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border-radius: 1px;
+  background: var(--walnut);
+}
+.card-plate{
+  display: block;
+  margin-top: 9px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--gold-dim);
+  text-align: center;
+}
+.card-plate .name{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(14px, 1.3vw, 16px);
+  color: var(--parchment);
+  line-height: 1.25;
+}
+.card-plate .era{
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--gold);
+  font-family: var(--sans);
+}
+
+.composer-card:hover .card-frame,
+.composer-card:focus-visible .card-frame{
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  box-shadow: 0 18px 34px rgba(0,0,0,.55), 0 0 0 1px var(--gold-dim);
+}
+.composer-card:focus-visible{ outline: none; }
+.composer-card:focus-visible .card-frame{ outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+.composer-card:active .card-frame{ transform: translateY(-2px); }
+
+/* the shelf ledge the cards appear to rest on */
+.shelf-ledge{
+  flex: 0 0 auto;
+  height: 2px;
+  margin-top: -30px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim) 12%, var(--gold-dim) 88%, transparent);
+}
+
+.shelf-nav{ display: none; }
+@media (hover: hover) and (pointer: fine){
+  .shelf-nav{
+    display: flex;
+    position: absolute; top: 50%; transform: translateY(-50%);
+    z-index: 2;
+  }
+  .shelf-nav.prev{ left: -6px; }
+  .shelf-nav.next{ right: -6px; }
+}
+
+/* ============================================================================
+   SCREENS 2–4 — the "open book" layout
+   ========================================================================== */
+.detail-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) 1px 1fr;
+  gap: clamp(20px, 3vw, 48px);
+  align-items: stretch;
+}
+
+.book-gutter{
+  background: linear-gradient(180deg, transparent, var(--gold-dim) 15%, var(--gold-dim) 85%, transparent);
+}
+
+.composer-panel{
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.composer-panel .panel-portrait{
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--gold-dim);
+  box-shadow: 0 14px 30px rgba(0,0,0,.5);
+  background: var(--walnut);
+}
+.composer-panel .panel-name{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(20px, 2.2vw, 27px);
+  margin: 18px 0 4px;
+  line-height: 1.2;
+}
+.composer-panel .panel-lifespan{
+  font-size: 14px;
+  color: var(--parchment-dim);
+  margin: 0 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+.era-pill{
+  display: inline-flex; align-items: center;
+  font-size: 11.5px; font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--gold-bright);
+  background: rgba(200,162,77,.14);
+  border: 1px solid var(--gold-dim);
+  border-radius: 999px;
+  padding: 4px 12px;
+  width: fit-content;
+}
+.info-row{
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.info-row .icon-btn.small{ border-color: var(--gold-dim); }
+.info-row span{ font-size: 13px; color: var(--parchment-dim); }
+
+/* ---- screen 2: song list ---- */
+.song-panel{ min-height: 0; display: flex; flex-direction: column; }
+.song-panel h2{
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(20px, 2.4vw, 28px);
+  margin: 0 0 16px;
+  flex: 0 0 auto;
+}
+.song-list{
+  list-style: none; margin: 0; padding: 2px 6px 24px 2px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.song-list > li{ list-style: none; margin: 0; padding: 0; }
+
+.song-row{
+  display: flex; align-items: center; gap: 16px;
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(30,19,10,.55);
+  border: 1px solid rgba(200,162,77,.16);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .16s ease, background .16s ease, transform .12s ease;
+}
+.song-row:hover{ border-color: var(--gold-dim); background: rgba(45,29,15,.7); }
+.song-row:active{ transform: scale(.995); }
+.song-row:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+.song-title{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--serif-display);
+  font-weight: 600;
+  font-size: clamp(15px, 1.6vw, 18px);
+  color: var(--parchment);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.song-score{
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  color: var(--parchment-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 96px;
+  text-align: right;
+}
+.song-score.has-score{ color: var(--gold-bright); }
+
+.difficulty-badge{
+  flex: 0 0 auto;
+  font-size: 11px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.difficulty-badge.easy{  color: #b9d9a0; background: rgba(120,170,90,.16); border-color: rgba(120,170,90,.35); }
+.difficulty-badge.normal{ color: #a9c6e6; background: rgba(90,130,180,.16); border-color: rgba(90,130,180,.35); }
+.difficulty-badge.hard{  color: #e3ab7a; background: rgba(190,120,60,.18); border-color: rgba(190,120,60,.4); }
+.difficulty-badge.master{ color: var(--burgundy-lit); background: rgba(122,38,50,.22); border-color: rgba(176,71,90,.5); }
+
+.chevron{ flex: 0 0 auto; color: var(--gold); opacity: .7; width: 16px; height: 16px; }
+
+.song-list-empty{
+  color: var(--parchment-dim);
+  font-style: italic;
+  font-family: var(--serif-read);
+  padding: 20px 4px;
+}
+
+/* ---- screen 3: biography ---- */
+.bio-panel{ min-height: 0; display: flex; flex-direction: column; }
+/* ---- screen 3: a bigger, framed portrait stands alone on the left,
+   like the plate page of a printed programme — vitals move in with the
+   biography on the right, per the brief. ---- */
+.portrait-feature{
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: clamp(0px, 1vh, 8px);
+  min-height: 0;
+}
+.portrait-feature .frame-inner{
+  position: relative;
+  width: 100%; max-width: 280px;
+}
+.portrait-feature img{
+  display: block; width: 100%;
+  aspect-ratio: 340 / 420;
+  object-fit: cover;
+  border: 1px solid var(--gold-dim);
+  box-shadow: 0 20px 40px rgba(0,0,0,.55);
+}
+.portrait-feature .frame-inner::before{
+  content: "";
+  position: absolute; inset: -10px;
+  border: 1px solid var(--gold-dim);
+  pointer-events: none;
+}
+
+.bio-panel h2{
+  font-family: var(--serif-display); font-weight: 600;
+  font-size: clamp(22px, 2.6vw, 30px);
+  margin: 0 0 4px;
+}
+.bio-vitals{
+  display: flex; flex-wrap: wrap; gap: 20px 28px;
+  margin-bottom: 22px;
+  flex: 0 0 auto;
+}
+.vital{ display: flex; flex-direction: column; gap: 2px; }
+.vital .label{
+  font-size: 11px; letter-spacing: .02em;
+  color: var(--gold);
+}
+.vital .value{
+  font-size: 14.5px; color: var(--parchment);
+  font-variant-numeric: tabular-nums;
+}
+
+.bio-text{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 12px;
+  font-family: var(--serif-read);
+  font-size: clamp(17px, 1.5vw, 19px);
+  line-height: 1.62;
+  color: var(--parchment);
+  max-width: 68ch;
+}
+.bio-text::first-letter{
+  font-family: var(--serif-display);
+  font-size: 3.4em;
+  font-weight: 700;
+  float: left;
+  line-height: .82;
+  padding: .04em .07em 0 0;
+  color: var(--gold-bright);
+}
+
+/* ---- screen 4: pre-play ---- */
+.preplay-panel{
+  min-height: 0;
+  display: flex; flex-direction: column;
+  justify-content: center;
+  max-width: 560px;
+}
+.preplay-panel .eyebrow{
+  font-family: var(--serif-read); font-style: italic;
+  color: var(--gold); font-size: 15px; margin: 0 0 8px;
+}
+.preplay-panel h2{
+  font-family: var(--serif-display); font-weight: 700;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.12;
+  margin: 0 0 18px;
+}
+.preplay-meta{
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 30px;
+}
+.score-card{
+  display: flex; flex-direction: column; gap: 2px;
+}
+.score-card .label{ font-size: 12px; color: var(--parchment-dim); }
+.score-card .value{
+  font-family: var(--serif-display); font-weight: 600;
+  font-size: 22px; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.score-card .value.is-empty{ color: var(--parchment-dim); font-style: italic; font-family: var(--serif-read); font-weight: 400; }
+
+.play-btn{
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 14px;
+  padding: 18px 34px 18px 30px;
+  border: 1px solid var(--gold-bright);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #e7c876, var(--gold) 55%, #a9822f);
+  color: #2a1a08;
+  font-family: var(--serif-display);
+  font-weight: 700;
+  font-size: clamp(18px, 2vw, 22px);
+  letter-spacing: .01em;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 4px 0 #7a5c22, 0 18px 34px rgba(0,0,0,.5);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.play-btn::after{
+  content: "";
+  position: absolute; left: 10%; right: 10%; bottom: -22px; height: 26px;
+  background: radial-gradient(50% 100% at 50% 0%, rgba(242,217,138,.4), transparent 75%);
+  pointer-events: none;
+}
+.play-btn svg{ width: 20px; height: 20px; }
+.play-btn:hover{ transform: translateY(-2px); box-shadow: 0 6px 0 #7a5c22, 0 22px 40px rgba(0,0,0,.55); }
+.play-btn:active{ transform: translateY(2px); box-shadow: 0 2px 0 #7a5c22, 0 10px 20px rgba(0,0,0,.4); }
+.play-btn:focus-visible{ outline: 2px solid var(--parchment); outline-offset: 4px; }
+
+/* ============================================================================
+   LOADING / ERROR STATES
+   ========================================================================== */
+.lobby-loading, .lobby-error{
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 24px;
+  transition: opacity .35s ease;
+}
+.lobby-loading[hidden], .lobby-error[hidden]{ display: none; }
+
+.note-spinner{
+  width: 34px; height: 34px;
+  border: 2px solid var(--gold-dim);
+  border-top-color: var(--gold-bright);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){ .note-spinner{ animation-duration: 2.4s; } }
+
+.lobby-loading p, .lobby-error p{
+  font-family: var(--serif-read); font-style: italic;
+  color: var(--parchment-dim); font-size: 16px; max-width: 40ch;
+}
+.lobby-error h2{
+  font-family: var(--serif-display); font-weight: 600; font-size: 22px; margin: 0;
+  color: var(--parchment);
+}
+.lobby-error .icon-btn{ margin-top: 6px; }
+
+.lobby-footer-link{
+  position: absolute;
+  right: clamp(20px, 5vw, 72px);
+  bottom: clamp(14px, 2.5vh, 22px);
+  z-index: 2;
+  font-size: 12.5px;
+  color: var(--parchment-dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color .16s ease, border-color .16s ease;
+}
+.lobby-footer-link:hover, .lobby-footer-link:focus-visible{
+  color: var(--gold-bright);
+  border-color: var(--gold-dim);
+}
+.lobby-footer-link:focus-visible{ outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+@media (max-width: 480px){
+  .lobby-footer-link{ right: 16px; bottom: 10px; font-size: 11.5px; }
+}
+
+/* ============================================================================
+   MOCK GAMEPLAY HANDOFF (demo-only — see js/lobby/app.js)
+   ========================================================================== */
+.mock-gameplay{
+  position: fixed; inset: 0; z-index: 30;
+  background: radial-gradient(120% 90% at 50% 20%, #241609, var(--stage) 70%);
+  display: flex; align-items: center; justify-content: center;
+}
+.mock-gameplay[hidden]{ display: none; }
+.mock-gameplay-inner{ text-align: center; max-width: 480px; padding: 24px; }
+.mock-kicker{
+  font-family: var(--sans); font-size: 12px; letter-spacing: .08em;
+  color: var(--gold); text-transform: uppercase; margin: 0 0 10px;
+}
+.mock-gameplay-inner h2{
+  font-family: var(--serif-display); font-size: clamp(26px, 4vw, 38px); margin: 0 0 6px;
+}
+.mock-gameplay-inner .mock-composer{ color: var(--parchment-dim); margin: 0 0 26px; }
+.mock-hint{
+  margin-top: 22px; font-size: 12.5px; color: var(--parchment-dim);
+  font-family: var(--sans); line-height: 1.6;
+}
+.mock-hint code{
+  background: rgba(200,162,77,.14); padding: 1px 6px; border-radius: 3px; color: var(--gold-bright);
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 760px){
+  .detail-body{
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1px 1fr;
+    gap: 18px;
+  }
+  .book-gutter{ height: 1px; background: linear-gradient(90deg, transparent, var(--gold-dim) 15%, var(--gold-dim) 85%, transparent); }
+  .composer-panel{ flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .composer-panel .panel-portrait{ width: 84px; max-width: 84px; flex: 0 0 auto; }
+  .composer-panel .panel-name{ margin: 0; font-size: 18px; flex: 1 1 auto; min-width: 0; }
+  .composer-panel .panel-lifespan{ margin: 0; flex-basis: 100%; }
+  .info-row{ margin-top: 0; padding-top: 0; }
+  .portrait-feature .frame-inner{ max-width: 132px; }
+  .bio-vitals{ gap: 12px 22px; }
+
+  .preplay-panel{ max-width: none; justify-content: flex-start; }
+  .play-btn{ align-self: stretch; justify-content: center; }
+}
+
+@media (max-width: 600px){
+  #screen1{ justify-content: flex-start; padding-top: clamp(28px, 8vh, 64px); }
+}
+
+@media (max-width: 480px){
+  .lobby-screen{ padding: 16px 16px clamp(16px, 5vh, 28px); }
+  .menu-header{ margin-bottom: 20px; }
+  .card-plate .era{ display: none; }
+  .song-score{ min-width: 0; }
+  .song-row{ flex-wrap: wrap; gap: 8px 14px; }
+  .song-title{ flex-basis: 100%; white-space: normal; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================================
+     LOBBY ROOT
+     This whole element is what you hide (add .is-hidden) or unmount once a
+     song actually starts — see the "MOCK GAMEPLAY HANDOFF" block near the
+     bottom of this file and js/lobby/app.js for the real hook.
+     ========================================================================== -->
+<div id="lobby-root">
+
+  <!-- ---------- loading state ---------- -->
+  <div class="lobby-loading" id="lobbyLoading">
+    <div class="note-spinner" aria-hidden="true"></div>
+    <p>Tuning the instruments…</p>
+  </div>
+
+  <!-- ---------- error state (fetch of game_data.json failed) ---------- -->
+  <div class="lobby-error" id="lobbyError" hidden>
+    <h2>The programme didn't load</h2>
+    <p id="lobbyErrorMessage">Something kept game_data.json from loading.</p>
+    <button class="icon-btn" id="retryBtn">Try again</button>
+  </div>
+
+  <!-- ==========================================================================
+       SCREEN 1 — Main Menu (composer selection)
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen1" aria-label="Choose a composer">
+    <header class="menu-header">
+      <p class="kicker">A programme of five masters</p>
+      <h1>Piano Classics</h1>
+    </header>
+
+    <div class="composer-shelf-wrap">
+      <button class="icon-btn round shelf-nav prev" id="shelfPrev" aria-label="Scroll composers left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+
+      <ul class="composer-shelf" id="composerShelf" role="list">
+        <!-- composer-card <li> elements are injected by js/lobby/screens.js -->
+      </ul>
+
+      <button class="icon-btn round shelf-nav next" id="shelfNext" aria-label="Scroll composers right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <div class="shelf-ledge" aria-hidden="true"></div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 2 — Song Selection
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen2" aria-label="Choose a piece">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo1" aria-label="Back to composers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="composer-panel">
+        <img class="panel-portrait" id="s2Portrait" src="" alt="">
+        <h2 class="panel-name" id="s2Name">&nbsp;</h2>
+        <p class="panel-lifespan" id="s2Lifespan">&nbsp;</p>
+        <span class="era-pill" id="s2Era">&nbsp;</span>
+
+        <div class="info-row">
+          <button class="icon-btn small" id="infoBtn" aria-label="About this composer">i</button>
+          <span>About the composer</span>
+        </div>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="song-panel">
+        <h2>Choose a piece</h2>
+        <ul class="song-list" id="songList" role="list">
+          <!-- song-row <li> elements are injected by js/lobby/screens.js -->
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 3 — Composer Biography
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen3" aria-label="Composer biography">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo2FromBio" aria-label="Back to pieces">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="portrait-feature">
+        <div class="frame-inner">
+          <img id="s3Portrait" src="" alt="">
+        </div>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="bio-panel">
+        <h2 id="s3Name">&nbsp;</h2>
+        <div class="bio-vitals">
+          <div class="vital"><span class="label">Lifespan</span><span class="value" id="s3Lifespan">&nbsp;</span></div>
+          <div class="vital"><span class="label">Era</span><span class="value" id="s3Era">&nbsp;</span></div>
+          <div class="vital"><span class="label">From</span><span class="value" id="s3Origin">&nbsp;</span></div>
+        </div>
+        <div class="bio-text" id="s3Bio"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       SCREEN 4 — Pre-Play (song details)
+       ========================================================================== -->
+  <section class="lobby-screen" id="screen4" aria-label="Song details">
+    <div class="lobby-topbar">
+      <button class="icon-btn" id="backTo2FromPreplay" aria-label="Back to pieces">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <div class="composer-panel">
+        <img class="panel-portrait" id="s4Portrait" src="" alt="">
+        <h2 class="panel-name" id="s4ComposerName">&nbsp;</h2>
+        <p class="panel-lifespan" id="s4Lifespan">&nbsp;</p>
+        <span class="era-pill" id="s4Era">&nbsp;</span>
+      </div>
+
+      <div class="book-gutter" aria-hidden="true"></div>
+
+      <div class="preplay-panel">
+        <p class="eyebrow" id="s4DifficultyLabel">&nbsp;</p>
+        <h2 id="s4SongTitle">&nbsp;</h2>
+
+        <div class="preplay-meta">
+          <div class="score-card">
+            <span class="label">My score</span>
+            <span class="value" id="s4Score">&nbsp;</span>
+          </div>
+        </div>
+
+        <button class="play-btn" id="playBtn">
+          Play
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Always-present escape hatch to the gameplay engine's own setup screen
+       (custom audio/chart upload, the by-ear recorder, the piano-roll
+       editor). Inert here in the standalone demo — js/integration.js is
+       what gives it a click handler, and it only loads alongside the real
+       gameplay module in index.html. -->
+  <a href="#" class="lobby-footer-link" id="customChartLink">Load your own song</a>
+
+</div><!-- /#lobby-root -->
+
+<!-- ============================================================================
+     MOCK GAMEPLAY HANDOFF — demo only.
+     This panel exists purely so this file is self-demonstrating. Delete it
+     (and the two lines in js/lobby/app.js that touch #mockGameplay) once the
+     real gameplay module is wired up — see the integration notes in
+     js/lobby/app.js and README.md for the "lobby:play" event it should
+     listen for instead.
+     ========================================================================== -->
+<div class="mock-gameplay" id="mockGameplay" hidden>
+  <div class="mock-gameplay-inner">
+    <p class="mock-kicker">Gameplay canvas placeholder</p>
+    <h2 id="mockSongTitle">&nbsp;</h2>
+    <p class="mock-composer" id="mockComposerName">&nbsp;</p>
+    <button class="icon-btn" id="mockBackBtn">Back to lobby</button>
+    <p class="mock-hint">
+      Real integration: listen for <code>document.addEventListener('lobby:play', …)</code>
+      and load <code>song.chartUrl</code> / <code>song.audioUrl</code> into the
+      gameplay module instead of showing this panel.
+    </p>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+const EMBEDDED_GAME_DATA = [{"id":"bach","name":"Johann Sebastian Bach","lifespan":"1685 - 1750","era":"Baroque","origin":"Eisenach, Germany","portraitUrl":"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20340%20420%22%20xmlns%3Ac2pa%3D%22http%3A%2F%2Fc2pa.org%2Fmanifest%22%3E%3Cmetadata%3E%3Cc2pa%3Amanifest%3EAAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYToyYzA5YmUyMS05NTMzLTQ1ZTAtOWVhMS1iYmMxNDg3YTY2ZGYAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaJP1TsQvJrzxmzxwsBSH5xcAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDplYTNmYWJiYi04YzgxLTQ2MjQtYWJiNy1jMGQ1YjhlZDE5MjBscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNocp5cEXgKVxi80eHUgwNlTAAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg7ln37PByjedo4DCuQhkPnYrU1d3ja9rYavrN2yGwNsikZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaOkzWZ4k3C4BeGyJcvO%2BV30AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCDJ5bNWfbnfdNQnKbWyA5q4q60wZtvUjxqAG6gUaPB45GRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjJjMDliZTIxLTk1MzMtNDVlMC05ZWExLWJiYzE0ODdhNjZkZi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjUyZjkyN2I1LWE3ZWYtNDU0MC1hMWEwLTg3NGY2MDdjYzZmZXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCDuWffs8HKN52jgMK5CGQ%2BditTV3eNr2thq%2Bs3bIbA2yKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggMu55EXCdbIdjufLbppc4ESoaM%2BbAaIRzWqc6CNZMV8yiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIBjD9S9z0FPl8VDYonqcGECy4sEF8pjDQ9fepE34GRp0Y2xhaW1fZ2VuZXJhdG9yX2luZm%2BjZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g%2FoGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd%2F3cyjxFA3Qo5S46fX0%2FihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB%2FwQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB%2FwQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj%2BOPEz5o%2BnMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn%2FaArXyTwFAZfKrPzxF2vPoJNf1%2BUCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9%2B1rdDwSPLMOPOjKuiXjoU%2FpUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQFuJcdlcQ1m0R1qMAJyEZ%2BmggtqN90uFO2ibpGfQ%2BENWKtVtPtb8gkLtWUw86muaGT5KDtJQizOqDwVna6VvEEs%3D%3C%2Fc2pa%3Amanifest%3E%3C%2Fmetadata%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%233a2a14%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23150d07%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22spot%22%20cx%3D%2250%25%22%20cy%3D%2232%25%22%20r%3D%2260%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23e8c56a%22%20stop-opacity%3D%22.35%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23e8c56a%22%20stop-opacity%3D%220%22%2F%3E%0A%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22frame%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23a9822f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23bg)%22%2F%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23spot)%22%2F%3E%0A%20%20%3C!--%20bust%20silhouette%20--%3E%0A%20%20%3Cg%20fill%3D%22%230b0704%22%20fill-opacity%3D%22.55%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22170.0%22%20cy%3D%22159.6%22%20r%3D%2262%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2062.0%20411.59999999999997%20C%2062.0%20260.4%2C%20106.0%20218.4%2C%20170.0%20218.4%20C%20234.0%20218.4%2C%20278.0%20260.4%2C%20278.0%20411.59999999999997%20Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3C!--%20initials%20--%3E%0A%20%20%3Ctext%20x%3D%22170.0%22%20y%3D%22165.9%22%20font-family%3D%22Playfair%20Display%2C%20Georgia%2C%20serif%22%20font-size%3D%2246%22%0A%20%20%20%20%20%20%20%20font-weight%3D%22700%22%20fill%3D%22%23e8c56a%22%20fill-opacity%3D%22.92%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%3EJ.S.B.%3C%2Ftext%3E%0A%20%20%3C!--%20frame%20--%3E%0A%20%20%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%22328%22%20height%3D%22408%22%20fill%3D%22none%22%20stroke%3D%22url(%23frame)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22312%22%20height%3D%22392%22%20fill%3D%22none%22%20stroke%3D%22%23e8c56a%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221%22%2F%3E%0A%3C%2Fsvg%3E","biography":"Bach spent most of his working life as a church organist and choirmaster in provincial German towns, ending his career at Leipzig's St. Thomas Church, where he supplied a new cantata almost every week for years on end. He was better known in his own lifetime as a virtuoso organist than as a composer, and much of his output was written simply to meet the demands of his job rather than for personal glory. His music is built on counterpoint — several independent melodic lines woven together so precisely that they lock like joinery — and works such as The Well-Tempered Clavier and the Goldberg Variations are still used to teach that discipline today. Bach's reputation as one of history's greatest composers was largely posthumous, rebuilt in the 19th century after decades in which his scores were dismissed as old-fashioned.","songs":[{"id":"bach-minuet-g","title":"Minuet in G Major","difficulty":"EASY","myScore":812340,"audioUrl":"assets/audio/bach-minuet-g.mp3","chartUrl":"charts/bach-minuet-g.json"},{"id":"bach-prelude-c","title":"Prelude in C Major","difficulty":"NORMAL","myScore":0,"audioUrl":"assets/audio/bach-prelude-c.mp3","chartUrl":"charts/bach-prelude-c.json"},{"id":"bach-toccata-fugue","title":"Toccata and Fugue in D Minor","difficulty":"MASTER","myScore":0,"audioUrl":"assets/audio/bach-toccata-fugue.mp3","chartUrl":"charts/bach-toccata-fugue.json"}]},{"id":"mozart","name":"Wolfgang Amadeus Mozart","lifespan":"1756 - 1791","era":"Classical","origin":"Salzburg, Austria","portraitUrl":"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20340%20420%22%20xmlns%3Ac2pa%3D%22http%3A%2F%2Fc2pa.org%2Fmanifest%22%3E%3Cmetadata%3E%3Cc2pa%3Amanifest%3EAAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo0NDI4YTRkZC03Y2Y2LTQxZGUtYjAxOS1jODM5ZDMwOGRmNzQAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaFO2LAv2MLYABR%2FTSlrmqVQAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpkZTE3NDhkNC04Y2JlLTQ1ODMtYTg4Zi1lMWNiMDllYTdhODFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo0nuEriPMuV909oDUSsd7qgAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggSdIxiUO03%2B6omUJ5mlIYWRphOUOwm2vqGqhKqj0BroikZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaG8Epw21lcbWjdP6LtkS2oMAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCADqwG6ozKJuH11RlykxBgLBTAnG%2B3%2F7fAtY9Yk1F433WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjQ0MjhhNGRkLTdjZjYtNDFkZS1iMDE5LWM4MzlkMzA4ZGY3NC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmQ0MmE3MjIzLTY0YWUtNGUzNi04NjkzLTM2N2UwYzU1ZTUyZnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCBJ0jGJQ7Tf7qiZQnmaUhhZGmE5Q7Cba%2BoaqEqqPQGuiKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggax%2Bc6aqmp6mCgqOhW6QcYVYna4AdwvZVYnaCIrGf7BeiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggJJOkf3OvkGwuTzv2U2nmwUR1nNouzXyVc34IdQx08%2BV0Y2xhaW1fZ2VuZXJhdG9yX2luZm%2BjZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g%2FoGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd%2F3cyjxFA3Qo5S46fX0%2FihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB%2FwQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB%2FwQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj%2BOPEz5o%2BnMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn%2FaArXyTwFAZfKrPzxF2vPoJNf1%2BUCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9%2B1rdDwSPLMOPOjKuiXjoU%2FpUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQFXin%2FpfhA4X7ANw8L4gcjwgUPJyi4M9SB8WBLbtbyfjTI5oqYK8u0w%2B%2FjuJq3rV0%2FUKZun%2BRTMKzTFoOxHmAww%3D%3C%2Fc2pa%3Amanifest%3E%3C%2Fmetadata%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%233a1f24%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23150a0c%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22spot%22%20cx%3D%2250%25%22%20cy%3D%2232%25%22%20r%3D%2260%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23e6a6b0%22%20stop-opacity%3D%22.35%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23e6a6b0%22%20stop-opacity%3D%220%22%2F%3E%0A%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22frame%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23a9822f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23bg)%22%2F%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23spot)%22%2F%3E%0A%20%20%3C!--%20bust%20silhouette%20--%3E%0A%20%20%3Cg%20fill%3D%22%230b0704%22%20fill-opacity%3D%22.55%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22170.0%22%20cy%3D%22159.6%22%20r%3D%2262%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2062.0%20411.59999999999997%20C%2062.0%20260.4%2C%20106.0%20218.4%2C%20170.0%20218.4%20C%20234.0%20218.4%2C%20278.0%20260.4%2C%20278.0%20411.59999999999997%20Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3C!--%20initials%20--%3E%0A%20%20%3Ctext%20x%3D%22170.0%22%20y%3D%22165.9%22%20font-family%3D%22Playfair%20Display%2C%20Georgia%2C%20serif%22%20font-size%3D%2246%22%0A%20%20%20%20%20%20%20%20font-weight%3D%22700%22%20fill%3D%22%23e6a6b0%22%20fill-opacity%3D%22.92%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%3EW.A.M.%3C%2Ftext%3E%0A%20%20%3C!--%20frame%20--%3E%0A%20%20%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%22328%22%20height%3D%22408%22%20fill%3D%22none%22%20stroke%3D%22url(%23frame)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22312%22%20height%3D%22392%22%20fill%3D%22none%22%20stroke%3D%22%23e6a6b0%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221%22%2F%3E%0A%3C%2Fsvg%3E","biography":"Mozart was performing for European royalty before he was six, touted by his father Leopold as a child prodigy on both harpsichord and violin. That early fame gave way to a difficult adult career: he left a secure court post in Salzburg to freelance in Vienna, where his income rose and fell with the popularity of his operas and subscription concerts. In barely thirty-five years he produced over six hundred works, moving easily between comic opera, symphony, and chamber music, and he wrote with famous speed, often composing a piece almost fully formed in his head before setting it on paper. He died in Vienna in 1791, officially of a fever, and was buried in a common grave in accordance with the modest funeral customs of the time — not the pauper's burial popular legend later made of it.","songs":[{"id":"mozart-turkish-march","title":"Rondo alla Turca","difficulty":"HARD","myScore":645200,"audioUrl":"assets/audio/mozart-turkish-march.mp3","chartUrl":"charts/mozart-turkish-march.json"},{"id":"mozart-eine-kleine","title":"Eine Kleine Nachtmusik","difficulty":"NORMAL","myScore":0,"audioUrl":"assets/audio/mozart-eine-kleine.mp3","chartUrl":"charts/mozart-eine-kleine.json"},{"id":"mozart-lacrimosa","title":"Lacrimosa","difficulty":"MASTER","myScore":0,"audioUrl":"assets/audio/mozart-lacrimosa.mp3","chartUrl":"charts/mozart-lacrimosa.json"}]},{"id":"beethoven","name":"Ludwig van Beethoven","lifespan":"1770 - 1827","era":"Classical / Romantic","origin":"Bonn, Germany","portraitUrl":"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20340%20420%22%20xmlns%3Ac2pa%3D%22http%3A%2F%2Fc2pa.org%2Fmanifest%22%3E%3Cmetadata%3E%3Cc2pa%3Amanifest%3EAAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo4MjExODY0OC05OTUxLTQ4ODAtOTkzMy0zMWM2ZDk4OTE0NzkAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaAX7gPMteFwisuV61o2euFcAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphYTNkMGQ2My0yMDk0LTRmZDctYmM3Ni1jNmE3MmFmNDA3ZTVscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNockYIL1zHP3aIor4T6kuvogAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggtyaIuazW5tLZhlQpFShmh8lKU5Z6WFmzRS8h%2BmO%2F6p2kZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaMIXIr9J2%2FUfEqniqsiiHTgAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCBQ6mfyfQDIeG9UrHCtB9TGbuXQEOorIFzYXups%2F5uxXGRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjgyMTE4NjQ4LTk5NTEtNDg4MC05OTMzLTMxYzZkOTg5MTQ3OS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmQzZTk5ZWM3LTNkZjctNDIwMy1hNGJmLTE2MWNjZGIzMDdjM3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCC3Joi5rNbm0tmGVCkVKGaHyUpTlnpYWbNFLyH6Y7%2FqnaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggEGu94PE7STAwyl0sILDGFdyEG6zVfYdhZUoXx9Y3MkOiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggAgR1kmU3a0%2BqU3fbF%2BF4n%2BCyOFzTX0TSBzH2S6ctObV0Y2xhaW1fZ2VuZXJhdG9yX2luZm%2BjZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g%2FoGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd%2F3cyjxFA3Qo5S46fX0%2FihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB%2FwQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB%2FwQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj%2BOPEz5o%2BnMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn%2FaArXyTwFAZfKrPzxF2vPoJNf1%2BUCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9%2B1rdDwSPLMOPOjKuiXjoU%2FpUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQLiMlZiAu%2Bs3lcqD8HbHx%2FwtAiBzM42rsWwoMr92NAP22y7NOKXc5BtfU6cmXmp4oQk2mjXyZUv9Rev07TXBYP0%3D%3C%2Fc2pa%3Amanifest%3E%3C%2Fmetadata%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%232c2410%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23100c05%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22spot%22%20cx%3D%2250%25%22%20cy%3D%2232%25%22%20r%3D%2260%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23c98a4a%22%20stop-opacity%3D%22.35%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23c98a4a%22%20stop-opacity%3D%220%22%2F%3E%0A%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22frame%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23a9822f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23bg)%22%2F%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23spot)%22%2F%3E%0A%20%20%3C!--%20bust%20silhouette%20--%3E%0A%20%20%3Cg%20fill%3D%22%230b0704%22%20fill-opacity%3D%22.55%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22170.0%22%20cy%3D%22159.6%22%20r%3D%2262%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2062.0%20411.59999999999997%20C%2062.0%20260.4%2C%20106.0%20218.4%2C%20170.0%20218.4%20C%20234.0%20218.4%2C%20278.0%20260.4%2C%20278.0%20411.59999999999997%20Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3C!--%20initials%20--%3E%0A%20%20%3Ctext%20x%3D%22170.0%22%20y%3D%22165.9%22%20font-family%3D%22Playfair%20Display%2C%20Georgia%2C%20serif%22%20font-size%3D%2246%22%0A%20%20%20%20%20%20%20%20font-weight%3D%22700%22%20fill%3D%22%23c98a4a%22%20fill-opacity%3D%22.92%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%3EL.v.B.%3C%2Ftext%3E%0A%20%20%3C!--%20frame%20--%3E%0A%20%20%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%22328%22%20height%3D%22408%22%20fill%3D%22none%22%20stroke%3D%22url(%23frame)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22312%22%20height%3D%22392%22%20fill%3D%22none%22%20stroke%3D%22%23c98a4a%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221%22%2F%3E%0A%3C%2Fsvg%3E","biography":"Beethoven arrived in Vienna in his early twenties as a formidable piano virtuoso and a student of Haydn, quickly building a reputation for improvisations that could reduce a room to silence. In his late twenties his hearing began to fail, a slow and by his own account devastating decline he mostly hid from the public, confiding his despair only in a private letter he never sent. He kept composing and performing for another two decades, and some of his most ambitious works — the late piano sonatas, the Ninth Symphony — were written after he could no longer hear them played. His music sits at the hinge between the balanced Classical style he inherited and the more personal, turbulent Romantic style that followed, and he is generally credited with widening what a symphony or a sonata was allowed to express.","songs":[{"id":"beethoven-fur-elise","title":"Für Elise","difficulty":"EASY","myScore":921050,"audioUrl":"assets/audio/beethoven-fur-elise.mp3","chartUrl":"charts/beethoven-fur-elise.json"},{"id":"beethoven-moonlight","title":"Moonlight Sonata, 1st Movement","difficulty":"NORMAL","myScore":578430,"audioUrl":"assets/audio/beethoven-moonlight.mp3","chartUrl":"charts/beethoven-moonlight.json"},{"id":"beethoven-ode-to-joy","title":"Ode to Joy","difficulty":"EASY","myScore":0,"audioUrl":"assets/audio/beethoven-ode-to-joy.mp3","chartUrl":"charts/beethoven-ode-to-joy.json"},{"id":"beethoven-pathetique","title":"Pathétique Sonata, 3rd Movement","difficulty":"MASTER","myScore":0,"audioUrl":"assets/audio/beethoven-pathetique.mp3","chartUrl":"charts/beethoven-pathetique.json"}]},{"id":"chopin","name":"Frédéric Chopin","lifespan":"1810 - 1849","era":"Romantic","origin":"Żelazowa Wola, Poland","portraitUrl":"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20340%20420%22%20xmlns%3Ac2pa%3D%22http%3A%2F%2Fc2pa.org%2Fmanifest%22%3E%3Cmetadata%3E%3Cc2pa%3Amanifest%3EAAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo1NjIwNjhkNi03Zjk5LTQ0NDItYTMwZC04ZDU0YTliMzFhNTQAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaE9vllxAB3004aHssP%2F9ZY4AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyM2U4YWM1Ni04ZjFkLTQ4NzEtYmQ0OC1iZmM1MmUxZGE2N2JscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoM32tarj9OjFqe%2BkVAZeU0QAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggciKUnlKV%2BuPyQY32XU%2BSXU3JUWRfvqZqJIrp6%2FZywPmkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaIclkLOljXcIPbBsNe5g0BsAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCCxjMwT2R5HeML2kcqIfQiPBd%2FkBPWI8IpRGlKDhmhydGRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjU2MjA2OGQ2LTdmOTktNDQ0Mi1hMzBkLThkNTRhOWIzMWE1NC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjcyZmQ5YTBlLTNkYjEtNGI0ZC04NzQ1LTM5NWE0ZWM4ZTFkMnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCByIpSeUpX64%2FJBjfZdT5JdTclRZF%2B%2Bpmokiunr9nLA%2BaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFgg%2FY5GHpSqxLkMUdneFAxGSEPKhWdCMXc06IxapjMsVeGiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggm3qBhQENIE08xZmXMztX2sQncXaMkX%2F9x68tznidK%2Bd0Y2xhaW1fZ2VuZXJhdG9yX2luZm%2BjZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g%2FoGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd%2F3cyjxFA3Qo5S46fX0%2FihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB%2FwQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB%2FwQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj%2BOPEz5o%2BnMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn%2FaArXyTwFAZfKrPzxF2vPoJNf1%2BUCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9%2B1rdDwSPLMOPOjKuiXjoU%2FpUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQGU1gPm0a8Ey6sS2xr4jNzui1TevPdVIhbYWKq%2Fo3GCgoWKM19T4aLOWcUnmBnEKOkT0mA5%2B%2Fm4%2BswdT4H8qMFk%3D%3C%2Fc2pa%3Amanifest%3E%3C%2Fmetadata%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2333301f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2312100a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22spot%22%20cx%3D%2250%25%22%20cy%3D%2232%25%22%20r%3D%2260%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23e9dfb0%22%20stop-opacity%3D%22.35%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23e9dfb0%22%20stop-opacity%3D%220%22%2F%3E%0A%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22frame%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23a9822f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23bg)%22%2F%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23spot)%22%2F%3E%0A%20%20%3C!--%20bust%20silhouette%20--%3E%0A%20%20%3Cg%20fill%3D%22%230b0704%22%20fill-opacity%3D%22.55%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22170.0%22%20cy%3D%22159.6%22%20r%3D%2262%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2062.0%20411.59999999999997%20C%2062.0%20260.4%2C%20106.0%20218.4%2C%20170.0%20218.4%20C%20234.0%20218.4%2C%20278.0%20260.4%2C%20278.0%20411.59999999999997%20Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3C!--%20initials%20--%3E%0A%20%20%3Ctext%20x%3D%22170.0%22%20y%3D%22165.9%22%20font-family%3D%22Playfair%20Display%2C%20Georgia%2C%20serif%22%20font-size%3D%2246%22%0A%20%20%20%20%20%20%20%20font-weight%3D%22700%22%20fill%3D%22%23e9dfb0%22%20fill-opacity%3D%22.92%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%3EF.C.%3C%2Ftext%3E%0A%20%20%3C!--%20frame%20--%3E%0A%20%20%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%22328%22%20height%3D%22408%22%20fill%3D%22none%22%20stroke%3D%22url(%23frame)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22312%22%20height%3D%22392%22%20fill%3D%22none%22%20stroke%3D%22%23e9dfb0%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221%22%2F%3E%0A%3C%2Fsvg%3E","biography":"Chopin left Poland at twenty and never returned, settling in Paris as the political unrest of the time made the trip home increasingly impossible. He earned his living mostly by teaching piano to the city's wealthy families, since he disliked the large public concerts most virtuosos depended on and gave only a handful of paid performances in his lifetime, preferring the intimacy of a private salon. Almost everything he wrote was for solo piano, and he treated the instrument with a harmonic subtlety and a rhythmic freedom — the flexible push and pull known as rubato — that few of his contemporaries attempted. He suffered from poor health for most of his adult life and died in Paris at thirty-nine, reportedly asking for his heart to be removed and returned to Poland, where it remains sealed inside a church pillar in Warsaw.","songs":[{"id":"chopin-nocturne-op9-2","title":"Nocturne in E-flat Major, Op. 9 No. 2","difficulty":"NORMAL","myScore":733910,"audioUrl":"assets/audio/chopin-nocturne-op9-2.mp3","chartUrl":"charts/chopin-nocturne-op9-2.json"},{"id":"chopin-minute-waltz","title":"Minute Waltz, Op. 64 No. 1","difficulty":"HARD","myScore":0,"audioUrl":"assets/audio/chopin-minute-waltz.mp3","chartUrl":"charts/chopin-minute-waltz.json"},{"id":"chopin-revolutionary","title":"Revolutionary Étude, Op. 10 No. 12","difficulty":"MASTER","myScore":0,"audioUrl":"assets/audio/chopin-revolutionary.mp3","chartUrl":"charts/chopin-revolutionary.json"}]},{"id":"handel","name":"George Frideric Handel","lifespan":"1685 - 1759","era":"Baroque","origin":"Halle, Germany","portraitUrl":"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20340%20420%22%20xmlns%3Ac2pa%3D%22http%3A%2F%2Fc2pa.org%2Fmanifest%22%3E%3Cmetadata%3E%3Cc2pa%3Amanifest%3EAAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo3OTI3ZWIwMC1mMzVhLTQ0ZDMtOGQ5OC0wYjc1OWUxYmIwYzgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaMIm3TjZvgFdKqE7%2FPfB5PQAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo3NzNiZjJmMC03NTgyLTRiMDQtOWU0YS1mNGMyY2Q3MmQ3OTZscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoYFvl%2B4NWwmhKV%2FbgxcneYQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggmVKAZA0bRnN5pAEZoDG%2FaleUzckpf6MwzFTl3hGbs6ukZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaHXovk9RHqgcNNSeXS645%2FsAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCBOyGpJDLov8fmh7E5bbL5FZ5fG%2Fs2mWIKcCIVWumZ4u2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjc5MjdlYjAwLWYzNWEtNDRkMy04ZDk4LTBiNzU5ZTFiYjBjOC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmMwM2Q3OWZjLTVjNjctNDE0Yy04YzQyLTk0OTRhMjJkNzkzNXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCZUoBkDRtGc3mkARmgMb9qV5TNySl%2FozDMVOXeEZuzq6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggeYBPF%2FZTadAXuOiMYKqiUe%2FV4YwI3o%2BpSNnunFZ7tiGiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggNdfPXCvF4UpxpWP2q154OOp2%2Barh5Idm3SRLKSILTyZ0Y2xhaW1fZ2VuZXJhdG9yX2luZm%2BjZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g%2FoGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd%2F3cyjxFA3Qo5S46fX0%2FihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB%2FwQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB%2FwQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj%2BOPEz5o%2BnMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn%2FaArXyTwFAZfKrPzxF2vPoJNf1%2BUCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9%2B1rdDwSPLMOPOjKuiXjoU%2FpUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQIoNgUW4N4TXNCNi7zliLE2DtVCDPIHLGLvpMRIUIQ%2Bdm%2BUIjNqZ8qIvPY1gjZPq8xeD7CSgMP9Zh%2BLYVjjvMqI%3D%3C%2Fc2pa%3Amanifest%3E%3C%2Fmetadata%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%233a2a10%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23150e05%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22spot%22%20cx%3D%2250%25%22%20cy%3D%2232%25%22%20r%3D%2260%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f0d27a%22%20stop-opacity%3D%22.35%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f0d27a%22%20stop-opacity%3D%220%22%2F%3E%0A%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22frame%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23a9822f%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f2d98a%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23bg)%22%2F%3E%0A%20%20%3Crect%20width%3D%22340%22%20height%3D%22420%22%20fill%3D%22url(%23spot)%22%2F%3E%0A%20%20%3C!--%20bust%20silhouette%20--%3E%0A%20%20%3Cg%20fill%3D%22%230b0704%22%20fill-opacity%3D%22.55%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22170.0%22%20cy%3D%22159.6%22%20r%3D%2262%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2062.0%20411.59999999999997%20C%2062.0%20260.4%2C%20106.0%20218.4%2C%20170.0%20218.4%20C%20234.0%20218.4%2C%20278.0%20260.4%2C%20278.0%20411.59999999999997%20Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3C!--%20initials%20--%3E%0A%20%20%3Ctext%20x%3D%22170.0%22%20y%3D%22165.9%22%20font-family%3D%22Playfair%20Display%2C%20Georgia%2C%20serif%22%20font-size%3D%2246%22%0A%20%20%20%20%20%20%20%20font-weight%3D%22700%22%20fill%3D%22%23f0d27a%22%20fill-opacity%3D%22.92%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%3EG.F.H.%3C%2Ftext%3E%0A%20%20%3C!--%20frame%20--%3E%0A%20%20%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%22328%22%20height%3D%22408%22%20fill%3D%22none%22%20stroke%3D%22url(%23frame)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22312%22%20height%3D%22392%22%20fill%3D%22none%22%20stroke%3D%22%23f0d27a%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221%22%2F%3E%0A%3C%2Fsvg%3E","biography":"Handel trained in Germany and Italy before settling permanently in London, where he became the city's leading composer of Italian opera and, later, English oratorio. He worked as much as an impresario as a composer — renting theatres, hiring singers, and managing the business risk of an opera company himself — and weathered several financial collapses along the way, including one severe enough that a stroke was blamed on the strain. Water Music, written for a royal river procession on the Thames in 1717, and the oratorio Messiah, composed in just over three weeks in 1741, remain his best-known works today. He became a British subject in 1727 and, going blind in his final years, continued to perform organ concertos from memory almost until his death in London, where he was given a state funeral in Westminster Abbey.","songs":[{"id":"handel-alla-hornpipe","title":"Water Music Suite No. 2: Alla Hornpipe","difficulty":"MASTER","myScore":1000000,"audioUrl":"assets/audio/alla-hornpipe.mp3","chartUrl":"charts/demo-alla-hornpipe.json"},{"id":"handel-sarabande","title":"Sarabande in D Minor","difficulty":"NORMAL","myScore":0,"audioUrl":"assets/audio/handel-sarabande.mp3","chartUrl":"charts/handel-sarabande.json"},{"id":"handel-hallelujah","title":"Hallelujah Chorus","difficulty":"HARD","myScore":0,"audioUrl":"assets/audio/handel-hallelujah.mp3","chartUrl":"charts/handel-hallelujah.json"}]}];
+
+
+/* ===== js/lobby/data.js ================================================== */
+/* =========================================================================
+ *  DATA  (js/lobby/data.js)
+ *  -------------------------------------------------------------------------
+ *  The lobby's only connection to the outside world: one fetch() of
+ *  game_data.json. Nothing else in the lobby modules knows or cares that
+ *  the data comes from a file — swap this for a real API call later and
+ *  screens.js / app.js don't change.
+ *
+ *  Schema (root is the array itself):
+ *    [{
+ *      id, name, lifespan, era, origin, portraitUrl, biography,
+ *      songs: [{ id, title, difficulty, myScore, audioUrl, chartUrl }]
+ *    }, …]
+ * ======================================================================= */
+
+class GameDataError extends Error {}
+
+/**
+ * @param {string} url
+ * @returns {Promise<object[]>} the composers array, validated and normalized
+ */
+async function loadGameData() {
+  const raw = EMBEDDED_GAME_DATA;
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.composers) ? raw.composers : null;
+  if (!list) throw new GameDataError("Embedded game data should be an array of composers.");
+  if (!list.length) throw new GameDataError("Embedded game data has no composers in it.");
+  return list.map(normalizeComposer);
+}
+
+const DIFFICULTIES = ["EASY", "NORMAL", "HARD", "MASTER"];
+
+function normalizeComposer(c, i) {
+  if (!c || typeof c !== "object") throw new GameDataError(`composers[${i}] isn't an object.`);
+  if (!c.id) throw new GameDataError(`composers[${i}] is missing an "id".`);
+  return {
+    id: String(c.id),
+    name: c.name || "Unknown composer",
+    lifespan: c.lifespan || "",
+    era: c.era || "",
+    origin: c.origin || "",
+    portraitUrl: c.portraitUrl || "",
+    biography: c.biography || "No biography has been written for this composer yet.",
+    songs: Array.isArray(c.songs) ? c.songs.map((s, j) => normalizeSong(s, i, j)) : [],
+  };
+}
+
+function normalizeSong(s, ci, si) {
+  if (!s || typeof s !== "object") throw new GameDataError(`composers[${ci}].songs[${si}] isn't an object.`);
+  if (!s.id) throw new GameDataError(`composers[${ci}].songs[${si}] is missing an "id".`);
+  const difficulty = String(s.difficulty || "NORMAL").toUpperCase();
+  return {
+    id: String(s.id),
+    title: s.title || "Untitled",
+    difficulty: DIFFICULTIES.includes(difficulty) ? difficulty : "NORMAL",
+    myScore: Number.isFinite(s.myScore) ? s.myScore : 0,
+    audioUrl: s.audioUrl || "",
+    chartUrl: s.chartUrl || "",
+  };
+}
+
+
+/* ===== js/lobby/screens.js =============================================== */
+/* =========================================================================
+ *  SCREENS  (js/lobby/screens.js)
+ *  -------------------------------------------------------------------------
+ *  Everything that touches the DOM: populating the four screens from data,
+ *  and the fade/drift transition between them. app.js owns *when* to call
+ *  these; this module only knows *how*.
+ * ======================================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+const el = {
+  loading: $("lobbyLoading"),
+  error: $("lobbyError"),
+  errorMessage: $("lobbyErrorMessage"),
+  screens: {
+    screen1: $("screen1"),
+    screen2: $("screen2"),
+    screen3: $("screen3"),
+    screen4: $("screen4"),
+  },
+
+  composerShelf: $("composerShelf"),
+  shelfPrev: $("shelfPrev"),
+  shelfNext: $("shelfNext"),
+
+  s2Portrait: $("s2Portrait"), s2Name: $("s2Name"), s2Lifespan: $("s2Lifespan"), s2Era: $("s2Era"),
+  songList: $("songList"),
+
+  s3Portrait: $("s3Portrait"), s3Name: $("s3Name"),
+  s3Lifespan: $("s3Lifespan"), s3Era: $("s3Era"), s3Origin: $("s3Origin"), s3Bio: $("s3Bio"),
+
+  s4Portrait: $("s4Portrait"), s4ComposerName: $("s4ComposerName"),
+  s4Lifespan: $("s4Lifespan"), s4Era: $("s4Era"),
+  s4DifficultyLabel: $("s4DifficultyLabel"), s4SongTitle: $("s4SongTitle"), s4Score: $("s4Score"),
+};
+
+/* A silhouette-and-initials placeholder, used only if a portraitUrl 404s —
+ * every composer in game_data.json ships with a real (generated) SVG, so
+ * this is a defensive fallback for whatever data you plug in later. */
+function placeholderPortrait(name) {
+  const initials = name.split(/\s+/).map((w) => w[0]).slice(0, 3).join("").toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 420">
+    <rect width="340" height="420" fill="#241609"/>
+    <circle cx="170" cy="160" r="62" fill="#0b0704" fill-opacity=".55"/>
+    <path d="M62 410c0-64 44-116 108-116s108 52 108 116" fill="#0b0704" fill-opacity=".55"/>
+    <text x="170" y="168" font-family="Georgia, serif" font-size="42" font-weight="700"
+          fill="#c8a24d" text-anchor="middle" dominant-baseline="middle">${initials}</text>
+  </svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+function setPortrait(img, composer) {
+  img.src = composer.portraitUrl || placeholderPortrait(composer.name);
+  img.alt = `Portrait of ${composer.name}`;
+  img.onerror = () => { img.onerror = null; img.src = placeholderPortrait(composer.name); };
+}
+
+function formatScore(myScore) {
+  return myScore > 0 ? myScore.toLocaleString() : "";
+}
+
+/* =====================================================================
+ *  SCREEN 1 — composer shelf
+ * =================================================================== */
+function renderComposerShelf(composers, onSelect) {
+  el.composerShelf.innerHTML = "";
+  composers.forEach((composer, i) => {
+    const li = document.createElement("li");
+    li.style.setProperty("--stagger", `${Math.min(i, 10) * 45}ms`);
+
+    const btn = document.createElement("button");
+    btn.className = "composer-card";
+    btn.type = "button";
+    btn.setAttribute("aria-label", `${composer.name} — ${composer.songs.length} piece${composer.songs.length === 1 ? "" : "s"}`);
+    btn.innerHTML = `
+      <span class="card-frame">
+        <img class="card-portrait" alt="" />
+      </span>
+      <span class="card-plate">
+        <span class="name">${escapeHtml(composer.name)}</span>
+        <span class="era">${escapeHtml(composer.era)}</span>
+      </span>
+    `;
+    setPortrait(btn.querySelector(".card-portrait"), composer);
+    btn.addEventListener("click", () => onSelect(composer));
+
+    li.appendChild(btn);
+    el.composerShelf.appendChild(li);
+  });
+}
+
+function bindShelfNav() {
+  const scrollByCards = (dir) => {
+    const amount = Math.min(el.composerShelf.clientWidth * 0.7, 600) * dir;
+    el.composerShelf.scrollBy({ left: amount, behavior: "smooth" });
+  };
+  el.shelfPrev.addEventListener("click", () => scrollByCards(-1));
+  el.shelfNext.addEventListener("click", () => scrollByCards(1));
+}
+
+/* =====================================================================
+ *  SCREEN 2 — song selection
+ * =================================================================== */
+function renderComposerSummary(composer) {
+  setPortrait(el.s2Portrait, composer);
+  el.s2Name.textContent = composer.name;
+  el.s2Lifespan.textContent = composer.lifespan;
+  el.s2Era.textContent = composer.era;
+}
+
+function renderSongList(composer, onSelect) {
+  el.songList.innerHTML = "";
+
+  if (!composer.songs.length) {
+    const li = document.createElement("li");
+    li.className = "song-list-empty";
+    li.textContent = "No pieces are available for this composer yet.";
+    el.songList.appendChild(li);
+    return;
+  }
+
+  composer.songs.forEach((song) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "song-row";
+
+    const score = formatScore(song.myScore);
+    btn.innerHTML = `
+      <span class="song-title">${escapeHtml(song.title)}</span>
+      <span class="song-score${score ? " has-score" : ""}">${score ? "Best " + score : "Not played yet"}</span>
+      <span class="difficulty-badge ${song.difficulty.toLowerCase()}">${titleCase(song.difficulty)}</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    `;
+    btn.addEventListener("click", () => onSelect(song));
+    li.appendChild(btn);
+    el.songList.appendChild(li);
+  });
+}
+
+/* =====================================================================
+ *  SCREEN 3 — biography
+ * =================================================================== */
+function renderBiography(composer) {
+  setPortrait(el.s3Portrait, composer);
+  el.s3Name.textContent = composer.name;
+  el.s3Lifespan.textContent = composer.lifespan;
+  el.s3Era.textContent = composer.era;
+  el.s3Origin.textContent = composer.origin;
+
+  el.s3Bio.innerHTML = "";
+  const paragraphs = composer.biography.split(/\n{2,}/);
+  for (const p of paragraphs) {
+    const para = document.createElement("p");
+    para.textContent = p.trim();
+    para.style.margin = "0 0 1.1em";
+    el.s3Bio.appendChild(para);
+  }
+}
+
+/* =====================================================================
+ *  SCREEN 4 — pre-play
+ * =================================================================== */
+function renderPreplay(composer, song) {
+  setPortrait(el.s4Portrait, composer);
+  el.s4ComposerName.textContent = composer.name;
+  el.s4Lifespan.textContent = composer.lifespan;
+  el.s4Era.textContent = composer.era;
+
+  el.s4DifficultyLabel.textContent = titleCase(song.difficulty) + " difficulty";
+  el.s4SongTitle.textContent = song.title;
+
+  const score = formatScore(song.myScore);
+  el.s4Score.textContent = score || "Not yet played";
+  el.s4Score.classList.toggle("is-empty", !score);
+}
+
+/* =====================================================================
+ *  SCREEN STACK / TRANSITIONS / LOADING / ERROR
+ * =================================================================== */
+let current = null;
+
+/** @param {"screen1"|"screen2"|"screen3"|"screen4"} name
+ *  @param {"forward"|"back"} [direction] */
+function showScreen(name, direction = "forward") {
+  const dirClass = direction === "back" ? "enter-back" : "enter-forward";
+
+  for (const [key, node] of Object.entries(el.screens)) {
+    node.classList.remove("enter-forward", "enter-back");
+    if (key === name) {
+      node.classList.add(dirClass);
+      // force layout so the transition plays even if it was already display:none
+      void node.offsetWidth;
+      node.classList.add("is-active");
+    } else {
+      node.classList.remove("is-active");
+    }
+  }
+  current = name;
+}
+
+function currentScreen() { return current; }
+
+function showLoading() {
+  el.loading.hidden = false;
+  el.error.hidden = true;
+}
+
+function showLobbyError(message) {
+  el.loading.hidden = true;
+  el.error.hidden = false;
+  el.errorMessage.textContent = message;
+}
+
+function hideLoadingAndError() {
+  el.loading.hidden = true;
+  el.error.hidden = true;
+}
+
+function onRetry(handler) {
+  $("retryBtn").addEventListener("click", handler);
+}
+
+/* ---- tiny helpers ------------------------------------------------------ */
+function titleCase(s) { return s.charAt(0) + s.slice(1).toLowerCase(); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+
+/* ===== js/lobby/app.js =================================================== */
+/* =========================================================================
+ *  APP  (js/lobby/app.js)
+ *  -------------------------------------------------------------------------
+ *  Bootstraps the lobby: fetch game_data.json, wire the four screens'
+ *  navigation, and hand off to gameplay when Play is pressed.
+ *
+ *  ── HOOKING UP THE REAL 3D GAMEPLAY ───────────────────────────────────────
+ *  Pressing Play does two things, either of which is enough to integrate:
+ *
+ *    1. Dispatches a CustomEvent on `document`:
+ *         document.addEventListener('lobby:play', (e) => {
+ *           const { composer, song } = e.detail;
+ *           // song.chartUrl and song.audioUrl are exactly what
+ *           // game.loadChartFromURL() / game.conductor.loadURL() expect
+ *         });
+ *
+ *    2. Calls `window.onLobbyPlay(detail)` if you've defined it — a plain
+ *       function is sometimes simpler to wire up than an event listener.
+ *
+ *  Concretely, against the gameplay module already in this project:
+ * *    document.addEventListener('lobby:play', async ({ detail }) => {
+ *      document.getElementById('lobby-root').classList.add('is-hidden');
+ *      if (await game.loadChartFromURL(detail.song.chartUrl)) {
+ *        // if this rejects, startRun() still plays — just with the
+ *        // built-in harpsichord instead of the song's own recording
+ *        await game.conductor.loadURL(detail.song.audioUrl).catch(() => {});
+ *        game.startRun();
+ *      }
+ *    });
+ *
+ *  Everything below the "MOCK GAMEPLAY HANDOFF" comment exists only so this
+ *  file is self-demonstrating without a real gameplay module attached — it
+ *  checks for `window.game` and quietly does nothing once one exists, so
+ *  there's nothing to delete. In this project, `js/integration.js` is what
+ *  actually implements hook #1 above for `index.html` — see LOBBY.md.
+ * ======================================================================= */
+
+
+
+
+const state = {
+  composers: [],
+  currentComposer: null,
+  currentSong: null,
+};
+
+async function init() {
+  showLoading();
+  try {
+    state.composers = await loadGameData("game_data.json");
+  } catch (err) {
+    const message = err instanceof GameDataError
+      ? err.message
+      : "An unexpected error kept the programme from loading.";
+    showLobbyError(message);
+    return;
+  }
+  hideLoadingAndError();
+  renderComposerShelf(state.composers, goToComposer);
+  showScreen("screen1");
+}
+
+/* ---- navigation ------------------------------------------------------- */
+function goToComposer(composer) {
+  state.currentComposer = composer;
+  renderComposerSummary(composer);
+  renderSongList(composer, goToSong);
+  showScreen("screen2", "forward");
+}
+
+function goToSong(song) {
+  state.currentSong = song;
+  renderPreplay(state.currentComposer, song);
+  showScreen("screen4", "forward");
+}
+
+function goToBiography() {
+  renderBiography(state.currentComposer);
+  showScreen("screen3", "forward");
+}
+
+function back() {
+  const from = currentScreen();
+  if (from === "screen2") showScreen("screen1", "back");
+  else if (from === "screen3" || from === "screen4") showScreen("screen2", "back");
+}
+
+document.getElementById("backTo1").addEventListener("click", back);
+document.getElementById("backTo2FromBio").addEventListener("click", back);
+document.getElementById("backTo2FromPreplay").addEventListener("click", back);
+document.getElementById("infoBtn").addEventListener("click", goToBiography);
+onRetry(init);
+bindShelfNav();
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && currentScreen() !== "screen1") back();
+});
+
+/* ---- the Play handoff --------------------------------------------------
+ * This is the one function a real integration needs to know about: it
+ * always fires the event and the callback. Everything after that line is
+ * the mock demo panel, and only runs when no real gameplay module has
+ * attached itself (i.e. window.game doesn't exist) — see the file header. */
+document.getElementById("playBtn").addEventListener("click", () => {
+  const detail = { composer: state.currentComposer, song: state.currentSong };
+
+  document.dispatchEvent(new CustomEvent("lobby:play", { detail, bubbles: true }));
+  if (typeof window.onLobbyPlay === "function") window.onLobbyPlay(detail);
+
+  /* ============================================================
+   *  MOCK GAMEPLAY HANDOFF — demo only, present only in lobby.html.
+   *  index.html's real gameplay module sets window.game before this
+   *  ever runs, so this block is dead code there — nothing to delete.
+   * ============================================================ */
+  const mock = document.getElementById("mockGameplay");
+  if (mock && !window.game) {
+    document.getElementById("lobby-root").classList.add("is-hidden");
+    document.getElementById("mockSongTitle").textContent = detail.song.title;
+    document.getElementById("mockComposerName").textContent = detail.composer.name;
+    mock.hidden = false;
+  }
+});
+
+document.getElementById("mockBackBtn")?.addEventListener("click", () => {
+  document.getElementById("mockGameplay").hidden = true;
+  document.getElementById("lobby-root").classList.remove("is-hidden");
+});
+/* ============================================================
+ *  END MOCK GAMEPLAY HANDOFF
+ * ============================================================ */
+
+init();
+
+})();
+</script>
+</body>
+</html>
